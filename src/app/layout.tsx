@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EnerDive Admin",
-  description: "EnerDive Admin Dashboard",
+  title: "ENERGDIVE Admin",
+  description: "ENERGDIVE Admin Dashboard",
 };
 
 export default function RootLayout({
@@ -29,7 +29,7 @@ export default function RootLayout({
         lang="en"
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
-        <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
+        <body className="min-h-full flex flex-col bg-background text-foreground">
           {children}
         </body>
       </html>

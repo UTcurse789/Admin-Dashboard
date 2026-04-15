@@ -1,5 +1,28 @@
 import { auth } from "@clerk/nextjs/server";
 import { strapiFetch, StrapiResponse, StrapiArticle } from "@/lib/strapi";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  FileText,
+  CheckCircle,
+  Clock,
+  Calendar,
+} from "lucide-react";
 
 interface NormalisedArticle {
   id: number;
@@ -53,6 +76,162 @@ async function getArticles() {
   return { articles: formattedData, total: data.meta.pagination.total };
 }
 
+function getTypeBadgeColor(type: string): string {
+  switch (type.toLowerCase()) {
+    case "news":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    case "article":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "analysis":
+      return "bg-violet-50 text-violet-700 border-violet-200";
+    case "editorial":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "opinion":
+      return "bg-rose-50 text-rose-700 border-rose-200";
+    case "interview":
+      return "bg-cyan-50 text-cyan-700 border-cyan-200";
+    default:
+      return "bg-gray-50 text-gray-700 border-gray-200";
+  }
+}
+
+function SectorsCell({ sectors }: { sectors: string }) {
+  if (!sectors) return <span className="text-gray-400">—</span>;
+  const items = sectors.split(", ");
+  if (items.length <= 1) {
+    return <span className="text-gray-600 text-sm">{items[0]}</span>;
+  }
+  return (
+    <span className="text-gray-600 text-sm">
+      {items[0]}{" "}
+      <span className="text-gray-400 text-xs">+{items.length - 1} more</span>
+    </span>
+  );
+}
+
+function ArticlesTable({
+  articles,
+}: {
+  articles: NormalisedArticle[];
+}) {
+  if (articles.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="flex size-12 items-center justify-center rounded-full bg-gray-100">
+          <FileText className="h-6 w-6 text-gray-400" />
+        </div>
+        <p className="mt-4 text-sm font-medium text-gray-700">
+          No content found
+        </p>
+        <p className="mt-1 text-xs text-gray-400">
+          Articles will appear here once published in Strapi.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="w-[300px]">Title</TableHead>
+          <TableHead>Author</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Sectors</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Date</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {articles.map((article) => {
+          const truncatedTitle =
+            article.title.length > 50
+              ? article.title.substring(0, 50) + "…"
+              : article.title;
+          const authorInitial = article.author.charAt(0).toUpperCase();
+
+          return (
+            <TableRow key={article.id}>
+              {/* Title */}
+              <TableCell>
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 truncate max-w-[300px]">
+                    {truncatedTitle}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate max-w-[300px]">
+                    /{article.slug}
+                  </p>
+                </div>
+              </TableCell>
+
+              {/* Author */}
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Avatar className="size-6">
+                    <AvatarFallback className="text-[10px] bg-gray-100 text-gray-600 font-semibold">
+                      {authorInitial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm text-gray-600 truncate max-w-[120px]">
+                    {article.author}
+                  </span>
+                </div>
+              </TableCell>
+
+              {/* Type */}
+              <TableCell>
+                <Badge
+                  variant="outline"
+                  className={`rounded-full text-[11px] font-medium ${getTypeBadgeColor(article.category)}`}
+                >
+                  {article.category}
+                </Badge>
+              </TableCell>
+
+              {/* Sectors */}
+              <TableCell>
+                <SectorsCell sectors={article.sectors} />
+              </TableCell>
+
+              {/* Status */}
+              <TableCell>
+                {article.status === "published" ? (
+                  <Badge
+                    variant="outline"
+                    className="rounded-full bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] gap-1"
+                  >
+                    <span className="size-1.5 rounded-full bg-emerald-500" />
+                    Published
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="rounded-full bg-yellow-50 text-yellow-700 border-yellow-200 text-[11px] gap-1"
+                  >
+                    <span className="size-1.5 rounded-full bg-yellow-500" />
+                    Draft
+                  </Badge>
+                )}
+              </TableCell>
+
+              {/* Date */}
+              <TableCell className="text-right text-gray-600">
+                {article.Date
+                  ? new Date(article.Date).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "—"}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
 export default async function ContentPage() {
   const { userId } = await auth();
 
@@ -73,7 +252,6 @@ export default async function ContentPage() {
     fetchError = true;
   }
 
-  // ── Stats ──────────────────────────────────────────────────────────────
   const published = articles.filter((a) => a.status === "published").length;
   const drafts = articles.filter((a) => a.status === "draft").length;
 
@@ -83,261 +261,135 @@ export default async function ContentPage() {
     (a) => a.publishedAt && new Date(a.publishedAt) >= startOfMonth
   ).length;
 
+  const publishedArticles = articles.filter((a) => a.status === "published");
+  const draftArticles = articles.filter((a) => a.status === "draft");
+
   const stats = [
     {
       label: "Total Articles",
       value: totalArticles,
-      icon: (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className="size-5"
-        >
-          <path
-            fillRule="evenodd"
-            d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      ),
+      icon: FileText,
+      color: "text-emerald-600 bg-emerald-50",
     },
     {
       label: "Published",
       value: published,
-      icon: (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className="size-5"
-        >
-          <path
-            fillRule="evenodd"
-            d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      ),
+      icon: CheckCircle,
+      color: "text-blue-600 bg-blue-50",
     },
     {
       label: "Drafts",
       value: drafts,
-      icon: (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className="size-5"
-        >
-          <path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" />
-          <path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" />
-        </svg>
-      ),
+      icon: Clock,
+      color: "text-violet-600 bg-violet-50",
     },
     {
-      label: "Published this month",
+      label: "Published This Month",
       value: publishedThisMonth,
-      icon: (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className="size-5"
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      ),
+      icon: Calendar,
+      color: "text-orange-600 bg-orange-50",
     },
   ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
-          Content Management
-        </h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Articles published on EnerDive, synced from Strapi CMS.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+            Content Management
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Articles synced from Strapi CMS.
+          </p>
+        </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className="group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/80"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-            <div className="relative">
-              <span className="text-zinc-500">{stat.icon}</span>
-              <p className="mt-3 text-3xl font-semibold tracking-tight text-zinc-100">
-                {stat.value}
-              </p>
-              <p className="mt-1 text-sm text-zinc-500">{stat.label}</p>
-            </div>
-          </div>
-        ))}
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Card
+              key={stat.label}
+              className="transition-shadow duration-200 hover:shadow-md"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">
+                  {stat.label}
+                </CardTitle>
+                <div
+                  className={`flex size-8 items-center justify-center rounded-lg ${stat.color}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Error state */}
       {fetchError && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 text-center">
-          <p className="text-sm font-medium text-red-400">
-            Failed to connect to Strapi CMS
-          </p>
-          <p className="mt-1 text-xs text-zinc-500">
-            Check that STRAPI_URL and STRAPI_ADMIN_TOKEN are configured
-            correctly.
-          </p>
-        </div>
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-6 text-center">
+            <p className="text-sm font-medium text-red-700">
+              Failed to connect to Strapi CMS
+            </p>
+            <p className="mt-1 text-xs text-red-500">
+              Check that STRAPI_URL and STRAPI_ADMIN_TOKEN are configured
+              correctly.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Articles Table */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden backdrop-blur-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="border-b border-zinc-800 bg-zinc-900/50 text-xs uppercase text-zinc-500">
-              <tr>
-                <th
-                  scope="col"
-                  className="px-6 py-4 font-medium tracking-wider"
-                >
-                  Title
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-4 font-medium tracking-wider"
-                >
-                  Author
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-4 font-medium tracking-wider"
-                >
-                  Type
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-4 font-medium tracking-wider"
-                >
-                  Sectors
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-4 font-medium tracking-wider"
-                >
-                  Status
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-4 font-medium tracking-wider text-right"
-                >
-                  Date
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/50">
-              {articles.map((article) => (
-                <tr
-                  key={article.id}
-                  className="transition-colors hover:bg-zinc-800/20"
-                >
-                  {/* Title */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-xs font-medium text-zinc-300">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          className="size-4"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-zinc-200 max-w-[280px]">
-                          {article.title}
-                        </p>
-                        <p className="truncate text-xs text-zinc-500 max-w-[280px]">
-                          /{article.slug}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
+      {/* Tabbed table */}
+      <Tabs defaultValue="all" className="w-full">
+        <TabsList>
+          <TabsTrigger value="all">
+            All ({articles.length})
+          </TabsTrigger>
+          <TabsTrigger value="published">
+            Published ({published})
+          </TabsTrigger>
+          <TabsTrigger value="drafts">
+            Drafts ({drafts})
+          </TabsTrigger>
+        </TabsList>
 
-                  {/* Author */}
-                  <td className="px-6 py-4 text-zinc-400">{article.author}</td>
+        <TabsContent value="all">
+          <Card>
+            <CardContent className="p-0">
+              <ArticlesTable articles={articles} />
+            </CardContent>
+            <div className="flex items-center justify-between border-t px-6 py-4">
+              <p className="text-sm text-gray-500">
+                Showing {articles.length} of {totalArticles} articles
+              </p>
+            </div>
+          </Card>
+        </TabsContent>
 
-                  {/* Category / Type */}
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center rounded-md bg-zinc-800 px-2 py-1 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-700">
-                      {article.category}
-                    </span>
-                  </td>
+        <TabsContent value="published">
+          <Card>
+            <CardContent className="p-0">
+              <ArticlesTable articles={publishedArticles} />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                  {/* Sectors */}
-                  <td className="px-6 py-4">
-                    <span className="text-zinc-400 truncate max-w-[200px] block">
-                      {article.sectors || "—"}
-                    </span>
-                  </td>
-
-                  {/* Status */}
-                  <td className="px-6 py-4">
-                    {article.status === "published" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
-                        <span className="size-1.5 rounded-full bg-emerald-500" />
-                        Published
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-md bg-yellow-500/10 px-2 py-1 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20">
-                        <span className="size-1.5 rounded-full bg-yellow-500" />
-                        Draft
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Date */}
-                  <td className="px-6 py-4 text-right text-zinc-400">
-                    {article.Date
-                      ? new Date(article.Date).toLocaleDateString(
-                        "en-US",
-                        {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        }
-                      )
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-              {articles.length === 0 && !fetchError && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-6 py-12 text-center text-zinc-500"
-                  >
-                    No articles found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <TabsContent value="drafts">
+          <Card>
+            <CardContent className="p-0">
+              <ArticlesTable articles={draftArticles} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

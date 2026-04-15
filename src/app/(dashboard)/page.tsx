@@ -1,136 +1,347 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
+import { strapiFetch, StrapiResponse, StrapiArticle } from "@/lib/strapi";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Avatar,
+  AvatarFallback,
+} from "@/components/ui/avatar";
+import {
+  Users,
+  UserPlus,
+  Activity,
+  FileText,
+  ArrowUpRight,
+  ArrowRight,
+  BarChart3,
+} from "lucide-react";
+import Link from "next/link";
 
-const stats = [
-  {
-    label: "Total Users",
-    value: "—",
-    change: "+0%",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="size-5"
-      >
-        <path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Monthly Signups",
-    value: "—",
-    change: "+0%",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="size-5"
-      >
-        <path d="M10 9.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V10a.75.75 0 0 0-.75-.75H10ZM6 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H6ZM8 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H8ZM9.25 14a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V14ZM12 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H12ZM12 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H12ZM13.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H14a.75.75 0 0 1-.75-.75V12ZM14 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H14ZM3.25 4a.75.75 0 0 1 .75-.75h12a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75ZM3.25 7a.75.75 0 0 1 .75-.75h12a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75Z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Active Users",
-    value: "—",
-    change: "+0%",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="size-5"
-      >
-        <path
-          fillRule="evenodd"
-          d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z"
-          clipRule="evenodd"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: "Top Page",
-    value: "—",
-    change: "—",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="size-5"
-      >
-        <path
-          fillRule="evenodd"
-          d="M4.25 2A2.25 2.25 0 0 0 2 4.25v11.5A2.25 2.25 0 0 0 4.25 18h11.5A2.25 2.25 0 0 0 18 15.75V4.25A2.25 2.25 0 0 0 15.75 2H4.25Zm4.03 6.28a.75.75 0 0 0-1.06-1.06L4.97 9.47a.75.75 0 0 0 0 1.06l2.25 2.25a.75.75 0 0 0 1.06-1.06l-1.72-1.72 1.72-1.72Zm3.44-1.06a.75.75 0 1 1 1.06 1.06l1.72 1.72-1.72 1.72a.75.75 0 1 1-1.06-1.06l1.72-1.72-1.72-1.72Z"
-          clipRule="evenodd"
-        />
-      </svg>
-    ),
-  },
-];
+async function getDashboardData() {
+  const client = await clerkClient();
+  const userRes = await client.users.getUserList({
+    limit: 100,
+    orderBy: "-created_at",
+  });
+
+  const users = userRes.data.map((user) => ({
+    id: user.id,
+    email: user.emailAddresses[0]?.emailAddress || "No email",
+    firstName: user.firstName || "",
+    lastName: user.lastName || "",
+    createdAt: user.createdAt,
+    lastSignInAt: user.lastSignInAt,
+  }));
+
+  const now = Date.now();
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+  const totalUsers = userRes.totalCount;
+  const newThisMonth = users.filter((u) => u.createdAt >= thirtyDaysAgo).length;
+  const activeLast7Days = users.filter(
+    (u) => u.lastSignInAt && u.lastSignInAt >= sevenDaysAgo
+  ).length;
+
+  // Get Strapi articles
+  let totalArticles = 0;
+  let recentArticles: { title: string; type: string; publishedAt: string | null }[] = [];
+  try {
+    const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
+      "/api/contents?populate=*&sort=publishedAt:desc&pagination[limit]=5"
+    );
+    totalArticles = data.meta.pagination.total;
+    recentArticles = data.data.map((article) => {
+      const attrs = (article as any).attributes ?? article;
+      return {
+        title: attrs.Title ?? "Untitled",
+        type:
+          attrs.type_of_content?.data?.attributes?.name ??
+          attrs.type_of_content?.name ??
+          "Article",
+        publishedAt: attrs.publishedAt ?? null,
+      };
+    });
+  } catch (e) {
+    console.error("Failed to fetch Strapi data for dashboard:", e);
+  }
+
+  return {
+    totalUsers,
+    newThisMonth,
+    activeLast7Days,
+    totalArticles,
+    recentUsers: users.slice(0, 5),
+    recentArticles,
+  };
+}
 
 export default async function DashboardHome() {
   const { userId } = await auth();
+  if (!userId) return null;
+
+  const {
+    totalUsers,
+    newThisMonth,
+    activeLast7Days,
+    totalArticles,
+    recentUsers,
+    recentArticles,
+  } = await getDashboardData();
+
+  const stats = [
+    {
+      label: "Total Users",
+      value: totalUsers,
+      icon: Users,
+      color: "text-emerald-600 bg-emerald-50",
+      trend: null,
+    },
+    {
+      label: "New This Month",
+      value: newThisMonth,
+      icon: UserPlus,
+      color: "text-blue-600 bg-blue-50",
+      trend: null,
+    },
+    {
+      label: "Active Last 7 Days",
+      value: activeLast7Days,
+      icon: Activity,
+      color: "text-violet-600 bg-violet-50",
+      trend: null,
+    },
+    {
+      label: "Total Articles",
+      value: totalArticles,
+      icon: FileText,
+      color: "text-orange-600 bg-orange-50",
+      trend: null,
+    },
+  ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-6">
       {/* Welcome header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
-          Welcome to EnerDive Admin
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+          Welcome to Admin Dashboard
         </h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-gray-500">
           Manage your platform content, users, and analytics from one place.
         </p>
       </div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className="group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/80"
-          >
-            {/* Subtle gradient glow on hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Card
+              key={stat.label}
+              className="transition-shadow duration-200 hover:shadow-md"
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">
+                  {stat.label}
+                </CardTitle>
+                <div
+                  className={`flex size-8 items-center justify-center rounded-lg ${stat.color}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+              </CardContent>
+              {stat.trend && (
+                <CardFooter className="text-xs text-gray-500">
+                  <ArrowUpRight className="mr-1 h-3 w-3 text-emerald-500" />
+                  {stat.trend}
+                </CardFooter>
+              )}
+            </Card>
+          );
+        })}
+      </div>
 
-            <div className="relative">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-500">{stat.icon}</span>
-                <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
-                  {stat.change}
-                </span>
+      {/* Two-column activity */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        {/* Recent Users — 60% */}
+        <Card className="lg:col-span-3">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base font-semibold text-gray-900">
+              Recent Users
+            </CardTitle>
+            <Link
+              href="/users"
+              className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+            >
+              View all <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {recentUsers.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-gray-50"
+              >
+                <Avatar className="size-9">
+                  <AvatarFallback className="bg-gray-100 text-sm font-medium text-gray-600">
+                    {user.firstName?.charAt(0) ||
+                      user.email.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {user.firstName} {user.lastName}
+                    {!user.firstName && !user.lastName && (
+                      <span className="text-gray-400 italic">Unknown</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                </div>
+                <Badge variant="secondary" className="text-[11px]">
+                  {new Date(user.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </Badge>
               </div>
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-zinc-100">
-                {stat.value}
+            ))}
+            {recentUsers.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-4">
+                No users yet.
               </p>
-              <p className="mt-1 text-sm text-zinc-500">{stat.label}</p>
-            </div>
-          </div>
-        ))}
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Content — 40% */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base font-semibold text-gray-900">
+              Recent Content
+            </CardTitle>
+            <Link
+              href="/content"
+              className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+            >
+              View all <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {recentArticles.map((article, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-gray-50"
+              >
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {article.title}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge
+                      variant="secondary"
+                      className="text-[11px]"
+                    >
+                      {article.type}
+                    </Badge>
+                    {article.publishedAt && (
+                      <span className="text-[11px] text-gray-400">
+                        {new Date(article.publishedAt).toLocaleDateString(
+                          "en-US",
+                          { month: "short", day: "numeric" }
+                        )}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {recentArticles.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-4">
+                No content from Strapi.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Empty state hint */}
-      <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-zinc-800">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="size-5 text-zinc-400"
-          >
-            <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" />
-          </svg>
-        </div>
-        <p className="mt-4 text-sm font-medium text-zinc-300">
-          Connect your data sources
-        </p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Stats will populate once analytics data starts flowing in.
-        </p>
-      </div>
+      {/* Tabs */}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="content">Content</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <div className="flex size-12 items-center justify-center rounded-full bg-gray-100">
+                <BarChart3 className="h-6 w-6 text-gray-400" />
+              </div>
+              <p className="mt-4 text-sm font-medium text-gray-700">
+                Connect analytics to view chart data
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Charts and graphs will populate once analytics are connected.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="users">
+          <Card className="transition-shadow duration-200 hover:shadow-md">
+            <CardContent className="flex items-center justify-between py-6">
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  User Management
+                </p>
+                <p className="text-xs text-gray-500">
+                  View and manage all {totalUsers} registered users.
+                </p>
+              </div>
+              <Link href="/users">
+                <Badge className="cursor-pointer bg-gray-900 text-white hover:bg-gray-800 px-3 py-1.5 text-xs gap-1">
+                  Go to Users <ArrowRight className="h-3 w-3" />
+                </Badge>
+              </Link>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="content">
+          <Card className="transition-shadow duration-200 hover:shadow-md">
+            <CardContent className="flex items-center justify-between py-6">
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  Content Management
+                </p>
+                <p className="text-xs text-gray-500">
+                  Browse all {totalArticles} articles synced from Strapi.
+                </p>
+              </div>
+              <Link href="/content">
+                <Badge className="cursor-pointer bg-gray-900 text-white hover:bg-gray-800 px-3 py-1.5 text-xs gap-1">
+                  Go to Content <ArrowRight className="h-3 w-3" />
+                </Badge>
+              </Link>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
