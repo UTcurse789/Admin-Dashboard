@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { strapiFetch, StrapiResponse, StrapiArticle } from "@/lib/strapi";
 import {
   Card,
@@ -233,11 +232,6 @@ function ArticlesTable({
 }
 
 export default async function ContentPage() {
-  const { userId } = await auth();
-
-  if (!userId) {
-    return null;
-  }
 
   let articles: NormalisedArticle[] = [];
   let totalArticles = 0;

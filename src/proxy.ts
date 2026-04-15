@@ -1,18 +1,45 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getSessionFromRequest } from "@/lib/auth";
 
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)"]);
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect();
+  // Allow public paths
+  const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout"];
+  if (publicPaths.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
   }
-});
+
+  // Allow static files and Next.js internals
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.match(/\.(png|jpg|jpeg|svg|ico|webp|css|js)$/)
+  ) {
+    return NextResponse.next();
+  }
+
+  // Check session
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    const loginUrl = new URL("/login", request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
-    "/(api|trpc)(.*)",
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization)
+     * - favicon.ico
+     * - public files (images, etc.)
+     */
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

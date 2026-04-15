@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -12,6 +11,7 @@ import {
   Bell,
   Search,
   Menu,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -105,7 +105,14 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
@@ -153,15 +160,14 @@ export default function DashboardLayout({
               <Bell className="h-5 w-5 text-gray-500" />
               <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500" />
             </Button>
-            <div className="hidden md:block">
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: "size-8",
-                  },
-                }}
-              />
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4 text-gray-500" />
+            </Button>
           </div>
         </header>
 

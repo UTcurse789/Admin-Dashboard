@@ -1,4 +1,4 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import {
   Card,
   CardContent,
@@ -41,11 +41,7 @@ async function getUsers() {
 }
 
 export default async function UsersPage() {
-  const { userId } = await auth();
 
-  if (!userId) {
-    return null;
-  }
 
   // Fetch users server-side
   const { totalCount, users } = await getUsers();
