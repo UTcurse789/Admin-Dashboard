@@ -9,6 +9,6 @@ async function run() {
   });
   const data = await res.json();
   const list = data.data.slice(0, 5);
-  list.forEach(a => console.log(a.Title, "=> Author:", a.author?.name || a.author?.data?.attributes?.name || "NULL"));
+  list.forEach((a: any) => console.log(a.Title, "=> Author:", a.author?.name || a.author?.data?.attributes?.name || "NULL"));
 }
 run();
