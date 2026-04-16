@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { strapiFetch, StrapiResponse, StrapiArticle } from "@/lib/strapi";
 import {
   Card,
@@ -36,11 +38,27 @@ interface NormalisedArticle {
 }
 
 async function getArticles() {
-  const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
-    "/api/contents?populate=*&sort=publishedAt:desc"
-  );
+  let allArticles: any[] = [];
+  let page = 1;
+  let pageCount = 1;
+  let total = 0;
 
-  const formattedData: NormalisedArticle[] = data.data.map((article) => {
+  // Strapi limits to 100 max per page, so we fetch sequentially
+  while (page <= pageCount) {
+    const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
+      `/api/contents?populate=*&sort=publishedAt:desc&pagination[page]=${page}&pagination[pageSize]=100`
+    );
+    
+    if (data.data) {
+      allArticles = [...allArticles, ...data.data];
+    }
+    
+    total = data.meta.pagination.total;
+    pageCount = data.meta.pagination.pageCount;
+    page++;
+  }
+
+  const formattedData: NormalisedArticle[] = allArticles.map((article) => {
     const attrs = (article as any).attributes ?? article;
 
     const authorRaw =
@@ -72,7 +90,7 @@ async function getArticles() {
     };
   });
 
-  return { articles: formattedData, total: data.meta.pagination.total };
+  return { articles: formattedData, total };
 }
 
 function getTypeBadgeColor(type: string): string {
