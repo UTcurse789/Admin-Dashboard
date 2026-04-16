@@ -12,6 +12,7 @@ import {
   Search,
   Menu,
   LogOut,
+  PenTool,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Users", href: "/users", icon: Users },
   { label: "Content", href: "/content", icon: FileText },
+  { label: "Authors", href: "/authors", icon: PenTool },
   { label: "Funnels", href: "/funnels", icon: Filter },
   { label: "System", href: "/system", icon: Settings },
 ];

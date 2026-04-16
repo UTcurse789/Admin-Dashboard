@@ -37,6 +37,18 @@ export interface StrapiArticle {
   [key: string]: unknown;
 }
 
+export interface StrapiAuthor {
+  id: number;
+  documentId: string;
+  name: string;
+  slug?: string;
+  designation?: string | null;
+  bio?: Array<any>;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+}
+
 /**
  * Reusable fetch helper for Strapi CMS.
  * Attaches the admin bearer token and returns typed JSON.
@@ -54,8 +66,8 @@ export async function strapiFetch<T>(
       Authorization: `Bearer ${STRAPI_ADMIN_TOKEN}`,
       ...options?.headers,
     },
-    // Revalidate every 60 seconds so the dashboard stays reasonably fresh
-    next: { revalidate: 60 },
+    // Ensure the dashboard always fetches fresh data directly from Strapi
+    cache: "no-store",
   });
 
   if (!res.ok) {

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { clerkClient } from "@clerk/nextjs/server";
 import {
   Card,
