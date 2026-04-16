@@ -12,6 +12,8 @@ import {
   Search,
   Menu,
   LogOut,
+  Activity,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,7 @@ const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Users", href: "/users", icon: Users },
   { label: "Content", href: "/content", icon: FileText },
+  { label: "User Activity", href: "/user-activity", icon: Activity },
   { label: "Funnels", href: "/funnels", icon: Filter },
   { label: "System", href: "/system", icon: Settings },
 ];
