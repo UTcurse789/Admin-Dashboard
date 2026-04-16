@@ -44,6 +44,8 @@ import {
   Mail,
   Shield,
   Check,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { SerializedUser } from "./page";
 
@@ -115,6 +117,8 @@ export default function UsersDashboard({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
@@ -203,6 +207,13 @@ export default function UsersDashboard({
     ? users.findIndex((u) => u.id === selectedUser.id)
     : 0;
 
+  // ── Pagination ──
+  const totalPages = Math.max(1, Math.ceil(users.length / ITEMS_PER_PAGE));
+  const paginatedUsers = users.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Header */}
@@ -267,7 +278,7 @@ export default function UsersDashboard({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user, index) => {
+              {paginatedUsers.map((user, index) => {
                 const status = getUserStatus(user.lastSignInAt, sevenDaysAgo);
                 const colorClass = AVATAR_COLORS[index % AVATAR_COLORS.length];
 
@@ -321,8 +332,80 @@ export default function UsersDashboard({
         </CardContent>
         <div className="flex items-center justify-between border-t px-6 py-4">
           <p className="text-sm text-gray-500">
-            Showing {users.length} of {totalCount} users
+            Showing{" "}
+            <span className="font-medium text-gray-700">
+              {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+            </span>
+            –
+            <span className="font-medium text-gray-700">
+              {Math.min(currentPage * ITEMS_PER_PAGE, users.length)}
+            </span>{" "}
+            of{" "}
+            <span className="font-medium text-gray-700">
+              {users.length}
+            </span>{" "}
+            users
           </p>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="h-8 gap-1 text-sm"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+
+            {/* Page numbers */}
+            <div className="hidden items-center gap-1 sm:flex">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => {
+                  if (p === 1 || p === totalPages) return true;
+                  if (Math.abs(p - currentPage) <= 1) return true;
+                  return false;
+                })
+                .reduce<(number | "ellipsis")[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) {
+                    acc.push("ellipsis");
+                  }
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === "ellipsis" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={item}
+                      onClick={() => setCurrentPage(item as number)}
+                      className={`flex h-8 min-w-[32px] items-center justify-center rounded-md text-sm font-medium transition-all ${
+                        currentPage === item
+                          ? "bg-gray-900 text-white shadow-sm"
+                          : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  )
+                )}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="h-8 gap-1 text-sm"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </Card>
 
