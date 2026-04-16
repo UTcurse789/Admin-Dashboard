@@ -11,12 +11,27 @@ export async function GET() {
     }
 
     const client = await clerkClient();
-    const response = await client.users.getUserList({
-      limit: 100,
-      orderBy: "-created_at",
-    });
+    
+    let allUsers: any[] = [];
+    let offset = 0;
+    const limit = 500;
+    let totalCount = 0;
 
-    const users = response.data.map((user) => ({
+    while (true) {
+      const response = await client.users.getUserList({
+        limit,
+        offset,
+        orderBy: "-created_at",
+      });
+
+      allUsers = [...allUsers, ...response.data];
+      totalCount = response.totalCount;
+
+      if (response.data.length < limit) break;
+      offset += limit;
+    }
+
+    const users = allUsers.map((user) => ({
       id: user.id,
       email: user.emailAddresses[0]?.emailAddress || "No email",
       firstName: user.firstName,
@@ -26,7 +41,7 @@ export async function GET() {
     }));
 
     return NextResponse.json({
-      totalCount: response.totalCount,
+      totalCount,
       users: users,
     });
   } catch (error) {

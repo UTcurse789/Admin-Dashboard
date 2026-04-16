@@ -15,12 +15,26 @@ export interface SerializedUser {
 
 async function getUsers() {
   const client = await clerkClient();
-  const response = await client.users.getUserList({
-    limit: 100,
-    orderBy: "-created_at",
-  });
+  let allUsers: any[] = [];
+  let offset = 0;
+  const limit = 500;
+  let totalCount = 0;
 
-  const users: SerializedUser[] = response.data.map((user) => {
+  while (true) {
+    const response = await client.users.getUserList({
+      limit,
+      offset,
+      orderBy: "-created_at",
+    });
+
+    allUsers = [...allUsers, ...response.data];
+    totalCount = response.totalCount;
+
+    if (response.data.length < limit) break;
+    offset += limit;
+  }
+
+  const users: SerializedUser[] = allUsers.map((user) => {
     // Determine sign-up method
     const externalAccounts = (user as any).externalAccounts;
     let externalProvider: string | null = null;
@@ -40,7 +54,7 @@ async function getUsers() {
   });
 
   return {
-    totalCount: response.totalCount,
+    totalCount,
     users,
   };
 }
