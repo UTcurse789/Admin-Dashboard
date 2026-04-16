@@ -26,6 +26,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Users,
   UserPlus,
   Activity,
@@ -43,6 +49,8 @@ import {
   Globe,
   ChevronDown,
   PieChart as PieChartIcon,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   AreaChart,
@@ -179,12 +187,14 @@ function FlexChart({
   color,
   labelKey = "label",
   valueKey = "count",
+  onSliceClick,
 }: {
   data: { label: string; count: number }[];
   variant: ChartVariant;
   color?: string;
   labelKey?: string;
   valueKey?: string;
+  onSliceClick?: (label: string) => void;
 }) {
   if (data.length === 0)
     return (
@@ -206,6 +216,8 @@ function FlexChart({
             paddingAngle={2}
             dataKey={valueKey}
             nameKey={labelKey}
+            onClick={(e: any) => onSliceClick?.(e[labelKey] || e.name || e.payload?.[labelKey])}
+            cursor={onSliceClick ? "pointer" : "default"}
           >
             {data.map((_, i) => (
               <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />
@@ -252,7 +264,14 @@ function FlexChart({
         <XAxis type="number" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} allowDecimals={false} />
         <YAxis type="category" dataKey={labelKey} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} width={75} />
         <Tooltip content={<ChartTooltip />} />
-        <Bar dataKey={valueKey} name="Users" radius={[0, 4, 4, 0]} maxBarSize={20}>
+        <Bar 
+          dataKey={valueKey} 
+          name="Users" 
+          radius={[0, 4, 4, 0]} 
+          maxBarSize={20}
+          onClick={(e: any) => onSliceClick?.(e[labelKey] || e.name || e.payload?.[labelKey] || e.label)}
+          cursor={onSliceClick ? "pointer" : "default"}
+        >
           {data.map((_, i) => (
             <Cell key={i} fill={COLORS[i % COLORS.length]} />
           ))}
@@ -272,6 +291,32 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [stateChart, setStateChart] = useState<ChartVariant>("bar");
   const [salutationChart, setSalutationChart] = useState<ChartVariant>("pie");
   const [dataSourceChart, setDataSourceChart] = useState<ChartVariant>("pie");
+
+  // Filter popup states
+  const [selectedFilter, setSelectedFilter] = useState<{ key: string; value: string; label: string } | null>(null);
+  const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
+  const [isDialogLoading, setIsDialogLoading] = useState(false);
+  const [dialogPage, setDialogPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  const handleChartClick = async (key: string, value: string, label: string) => {
+    if (!value) return;
+    setSelectedFilter({ key, value, label });
+    setIsDialogLoading(true);
+    setFilteredUsers([]);
+    setDialogPage(1); // Reset page on new click
+    try {
+      const res = await fetch(`/api/users/filter?key=${key}&value=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      if (data.users) {
+        setFilteredUsers(data.users);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsDialogLoading(false);
+    }
+  };
 
   const now = Date.now();
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -484,7 +529,11 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[220px] w-full">
-              <FlexChart data={data.bySource} variant={sourceChart} />
+              <FlexChart 
+                data={data.bySource} 
+                variant={sourceChart} 
+                onSliceClick={(v) => handleChartClick("source", v, "Source")}
+              />
             </div>
           </CardContent>
         </Card>
@@ -503,7 +552,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              <FlexChart data={data.byIndustry.slice(0, 12)} variant={industryChart} color="#8b5cf6" />
+              <FlexChart 
+                data={data.byIndustry.slice(0, 12)} 
+                variant={industryChart} 
+                color="#8b5cf6" 
+                onSliceClick={(v) => handleChartClick("industry", v, "Industry")}
+              />
             </div>
           </CardContent>
         </Card>
@@ -519,7 +573,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              <FlexChart data={data.byDataSource} variant={dataSourceChart} color="#f59e0b" />
+              <FlexChart 
+                data={data.byDataSource} 
+                variant={dataSourceChart} 
+                color="#f59e0b" 
+                onSliceClick={(v) => handleChartClick("data_source", v, "Acquisition Channel")}
+              />
             </div>
           </CardContent>
         </Card>
@@ -538,7 +597,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[280px] w-full">
-              <FlexChart data={data.byState.slice(0, 10)} variant={stateChart} color="#f43f5e" />
+              <FlexChart 
+                data={data.byState.slice(0, 10)} 
+                variant={stateChart} 
+                color="#f43f5e" 
+                onSliceClick={(v) => handleChartClick("state", v, "State")}
+              />
             </div>
           </CardContent>
         </Card>
@@ -554,7 +618,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[280px] w-full">
-              <FlexChart data={data.bySalutation} variant={salutationChart} color="#06b6d4" />
+              <FlexChart 
+                data={data.bySalutation} 
+                variant={salutationChart} 
+                color="#06b6d4" 
+                onSliceClick={(v) => handleChartClick("salutation", v, "Salutation")}
+              />
             </div>
           </CardContent>
         </Card>
@@ -797,6 +866,95 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Filtered Users Dialog ─────────────────────────────── */}
+      <Dialog open={!!selectedFilter} onOpenChange={(open) => !open && setSelectedFilter(null)}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">
+              {selectedFilter?.label}: <span className="text-emerald-600">{selectedFilter?.value}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {isDialogLoading ? (
+              <div className="py-12 flex justify-center text-sm text-gray-500">Loading user data...</div>
+            ) : filteredUsers.length > 0 ? (
+              <div className="flex flex-col gap-4">
+                <div className="overflow-x-auto rounded-md border border-gray-200 shadow-sm">
+                  <Table className="w-full min-w-[500px]">
+                    <TableHeader>
+                      <TableRow className="bg-gray-50/50">
+                        <TableHead className="w-[40%] text-[11px] font-semibold uppercase tracking-wider text-gray-500">Name</TableHead>
+                        <TableHead className="w-[30%] text-[11px] font-semibold uppercase tracking-wider text-gray-500">Organization</TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Source</TableHead>
+                        <TableHead className="text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Joined</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredUsers.slice((dialogPage - 1) * ITEMS_PER_PAGE, dialogPage * ITEMS_PER_PAGE).map((u) => (
+                        <TableRow key={u.id} className="transition-colors hover:bg-gray-50/60">
+                          <TableCell className="max-w-[200px]">
+                            <p className="truncate text-sm font-medium text-gray-900">
+                              {u.salutation ? `${u.salutation} ` : ""}
+                              {u.first_name || ""} {u.last_name || ""}
+                            </p>
+                            <p className="truncate text-[11px] text-gray-500">{u.email}</p>
+                            {u.job_title && <p className="truncate text-[10px] text-gray-400">{u.job_title}</p>}
+                          </TableCell>
+                          <TableCell className="max-w-[150px]">
+                            <span className="truncate block text-xs text-gray-600" title={u.organization || ""}>
+                              {u.organization || "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="whitespace-nowrap text-[10px]">{u.source || "—"}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="whitespace-nowrap text-xs text-gray-500">
+                              {u.created_at ? new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                
+                {/* Pagination Controls */}
+                {filteredUsers.length > ITEMS_PER_PAGE && (
+                  <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                    <p className="text-[11px] text-gray-500">
+                      Showing <span className="font-medium text-gray-900">{(dialogPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-medium text-gray-900">{Math.min(dialogPage * ITEMS_PER_PAGE, filteredUsers.length)}</span> of <span className="font-medium text-gray-900">{filteredUsers.length}</span> results
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setDialogPage((p) => Math.max(1, p - 1))}
+                        disabled={dialogPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setDialogPage((p) => Math.min(Math.ceil(filteredUsers.length / ITEMS_PER_PAGE), p + 1))}
+                        disabled={dialogPage >= Math.ceil(filteredUsers.length / ITEMS_PER_PAGE)}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-sm text-gray-500">No users found for this filter.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
