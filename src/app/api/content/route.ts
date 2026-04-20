@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { strapiFetch, StrapiResponse, StrapiArticle } from "@/lib/strapi";
+import {
+  normalizeStrapiArticle,
+  strapiFetch,
+  StrapiResponse,
+  StrapiArticle,
+} from "@/lib/strapi";
 
 export async function GET() {
   try {
@@ -15,36 +20,18 @@ export async function GET() {
     );
 
     const articles = data.data.map((article) => {
-      // Strapi v4/v5 may nest fields inside `attributes` or flatten them.
-      // We handle both shapes defensively.
-      const attrs = (article as any).attributes ?? article;
-
-      const authorRaw =
-        attrs.author?.data?.attributes?.name ??
-        attrs.author?.name ??
-        null;
-
-      const typeOfContent =
-        attrs.type_of_content?.data?.attributes?.name ??
-        attrs.type_of_content?.name ??
-        null;
-
-      const sectorsRaw = attrs.sectors?.data
-        ? attrs.sectors.data.map((s: any) => s.attributes?.name).join(", ")
-        : attrs.sectors
-        ? attrs.sectors.map((s: any) => s.name).join(", ")
-        : "";
+      const normalized = normalizeStrapiArticle(article);
 
       return {
-        id: article.id,
-        title: attrs.Title ?? "Untitled",
-        slug: attrs.slug ?? "",
-        publishedAt: attrs.publishedAt ?? null,
-        Date: attrs.Date ?? null,
-        author: authorRaw ?? "Unknown",
-        category: typeOfContent ?? "Uncategorized",
-        sectors: sectorsRaw,
-        status: attrs.publishedAt ? "published" : "draft",
+        id: normalized.id,
+        title: normalized.title,
+        slug: normalized.slug,
+        publishedAt: normalized.publishedAt,
+        Date: normalized.date,
+        author: normalized.author,
+        category: normalized.category,
+        sectors: normalized.sectors,
+        status: normalized.status,
       };
     });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import {
   Search,
   Menu,
   LogOut,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,7 @@ const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Users", href: "/users", icon: Users },
   { label: "Content", href: "/content", icon: FileText },
+  { label: "User Activity", href: "/user-activity", icon: Activity },
   { label: "Funnels", href: "/funnels", icon: Filter },
   { label: "System", href: "/system", icon: Settings },
 ];
@@ -37,7 +40,11 @@ function pageTitleFromPath(pathname: string): string {
   if (pathname === "/") return "Dashboard";
   const segment = pathname.split("/").filter(Boolean)[0];
   if (!segment) return "Dashboard";
-  return segment.charAt(0).toUpperCase() + segment.slice(1);
+  return segment
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -47,9 +54,12 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-16 items-center px-5">
-        <img
+        <Image
           src="/energdive-logo.png"
           alt="EnerDive"
+          width={128}
+          height={32}
+          priority
           className="h-8 w-auto"
         />
       </div>
