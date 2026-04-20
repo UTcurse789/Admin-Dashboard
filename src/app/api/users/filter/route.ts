@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getDbAnalytics } from "@/lib/db";
 import pg from "pg";
 
 export async function GET(req: Request) {
@@ -15,9 +14,6 @@ export async function GET(req: Request) {
       );
     }
 
-    // Force TLS bypass if needed just in case (as done in lib/db)
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
     const pool = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
@@ -26,11 +22,11 @@ export async function GET(req: Request) {
     });
 
     let query = "";
-    let params: any[] = [];
+    let params: string[] = [];
 
     const baseSelect = `
-      SELECT id, email, first_name, last_name, organization,
-             source, state, salutation, created_at, job_title
+      SELECT users.id, users.email, users.first_name, users.last_name, users.organization,
+             users.source, users.state, users.salutation, users.created_at, users.job_title
       FROM users
     `;
 
@@ -40,7 +36,7 @@ export async function GET(req: Request) {
         JOIN user_industries ui ON users.id = ui.user_id
         JOIN industry i ON ui.industry_id = i.id
         WHERE i.name = $1
-        ORDER BY created_at DESC
+        ORDER BY users.created_at DESC
       `;
       params = [value];
     } else if (
@@ -49,8 +45,8 @@ export async function GET(req: Request) {
       // Direct column filter
       query = `
         ${baseSelect}
-        WHERE ${key} = $1
-        ORDER BY created_at DESC
+        WHERE users.${key} = $1
+        ORDER BY users.created_at DESC
       `;
       params = [value];
     } else {
@@ -63,10 +59,11 @@ export async function GET(req: Request) {
     await pool.end();
 
     return NextResponse.json({ users: rows });
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Filter API Error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch filtered users.", details: error.message },
+      { error: "Failed to fetch filtered users.", details: message },
       { status: 500 }
     );
   }

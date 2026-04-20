@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,24 +46,26 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="mb-8 flex justify-center">
-          <img
+          <Image
             src="/energdive-logo.png"
             alt="EnerDive"
+            width={160}
+            height={40}
+            priority
             className="h-10 w-auto"
           />
         </div>
 
         <Card className="shadow-lg">
-          <CardHeader className="text-center pb-4">
+          <CardHeader className="pb-4 text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-gray-100">
               <Lock className="h-5 w-5 text-gray-600" />
             </div>
             <CardTitle className="text-xl font-semibold text-gray-900">
               Admin Login
             </CardTitle>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="mt-1 text-sm text-gray-500">
               Enter your credentials to access the dashboard.
             </p>
           </CardHeader>
@@ -78,7 +81,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="bg-gray-50 border-gray-200 focus:bg-white"
+                  className="border-gray-200 bg-gray-50 focus:bg-white"
                 />
               </div>
               <div className="space-y-2">
@@ -87,16 +90,16 @@ export default function LoginPage() {
                 </label>
                 <Input
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="********"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="bg-gray-50 border-gray-200 focus:bg-white"
+                  className="border-gray-200 bg-gray-50 focus:bg-white"
                 />
               </div>
 
               {error && (
-                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 border border-red-200">
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                   {error}
                 </div>
               )}
@@ -113,7 +116,7 @@ export default function LoginPage() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          Secured access · EnerDive Admin Dashboard
+          Secured access | EnerDive Admin Dashboard
         </p>
       </div>
     </div>

@@ -1,79 +1,44 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import ReactECharts from "echarts-for-react";
+import * as echarts from "echarts";
+import type { EChartsOption } from "echarts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Users,
-  UserPlus,
-  Activity,
-  FileText,
-  ArrowUpRight,
-  ArrowDownRight,
-  ArrowRight,
-  Download,
-  Filter,
-  TrendingUp,
-  BarChart3,
-  Calendar,
-  Building2,
-  MapPin,
-  Globe,
-  ChevronDown,
-  PieChart as PieChartIcon,
-  ChevronLeft,
-  ChevronRight,
+  Users, UserPlus, Activity, FileText, ArrowUpRight, ArrowDownRight,
+  ArrowRight, Download, Filter, TrendingUp, BarChart3, Calendar,
+  Building2, MapPin, Globe, ChevronDown, PieChart as PieChartIcon,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  Legend,
-  RadialBarChart,
-  RadialBar,
-} from "recharts";
 import type { DashboardData, DailyDataPoint } from "./page";
 
 // ─── Types ──────────────────────────────────────────────────────────
 type DateRange = "7d" | "30d" | "90d" | "1y" | "all";
 type ChartVariant = "bar" | "pie" | "area";
+
+interface FilteredUser {
+  id: number | string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  salutation?: string | null;
+  organization?: string | null;
+  source?: string | null;
+  created_at?: string | null;
+  job_title?: string | null;
+}
 
 const DATE_PRESETS: { label: string; value: DateRange }[] = [
   { label: "7D", value: "7d" },
@@ -83,7 +48,29 @@ const DATE_PRESETS: { label: string; value: DateRange }[] = [
   { label: "All", value: "all" },
 ];
 
-// ─── Helpers ────────────────────────────────────────────────────────
+// ─── Palette & Helpers ───────────────────────────────────────────────
+const COLORS = [
+  "#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#f43f5e",
+  "#06b6d4", "#84cc16", "#ec4899", "#14b8a6", "#a855f7",
+  "#f97316", "#6366f1",
+];
+
+const STATE_NORM: Record<string, string> = {
+  up: "Uttar Pradesh", mp: "Madhya Pradesh", ap: "Andhra Pradesh",
+  gj: "Gujarat", mh: "Maharashtra", ka: "Karnataka", tn: "Tamil Nadu",
+  wb: "West Bengal", rj: "Rajasthan", hp: "Himachal Pradesh",
+  jk: "Jammu and Kashmir", jh: "Jharkhand", hr: "Haryana",
+  pb: "Punjab", uk: "Uttarakhand", br: "Bihar", od: "Odisha",
+  orissa: "Odisha", kl: "Kerala", ts: "Telangana", cg: "Chhattisgarh",
+  as: "Assam", dl: "Delhi", "new delhi": "Delhi", ncr: "Delhi",
+  ga: "Goa", goa: "Goa",
+};
+
+function normalizeState(name: string): string {
+  if (!name) return "";
+  return STATE_NORM[name.toLowerCase().trim()] || name;
+}
+
 function filterByRange(data: DailyDataPoint[], range: DateRange): DailyDataPoint[] {
   const daysMap: Record<DateRange, number | null> = {
     "7d": 7, "30d": 30, "90d": 90, "1y": 365, all: null,
@@ -95,12 +82,6 @@ function filterByRange(data: DailyDataPoint[], range: DateRange): DailyDataPoint
   const cutoffStr = cutoff.toISOString().slice(0, 10);
   return data.filter((d) => d.date >= cutoffStr);
 }
-
-const COLORS = [
-  "#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#f43f5e",
-  "#06b6d4", "#84cc16", "#ec4899", "#14b8a6", "#a855f7",
-  "#f97316", "#6366f1",
-];
 
 function trendPct(cur: number, prev: number): string {
   if (prev === 0) return cur > 0 ? "+100%" : "0%";
@@ -116,53 +97,26 @@ function contentPillClass(type: string): string {
   return "bg-gray-50 text-gray-600 border-gray-200";
 }
 
-// ─── CSV Export ─────────────────────────────────────────────────────
 function exportCSV(data: DashboardData) {
-  const header = "Name,Email,Joined,Source,Industry,State,Salutation,Organization\n";
+  const header = "Name,Email,Joined,Source,State,Salutation,Organization\n";
   const rows = data.recentDbUsers
     .map((u) => {
       const name = `${u.first_name || ""} ${u.last_name || ""}`.trim() || "Unknown";
       const joined = u.created_at ? new Date(u.created_at).toISOString().slice(0, 10) : "";
-      return `"${name}","${u.email}","${joined}","${u.source || ""}","","${u.state || ""}","${u.salutation || ""}","${u.organization || ""}"`;
+      return `"${name}","${u.email}","${joined}","${u.source || ""}","${u.state || ""}","${u.salutation || ""}","${u.organization || ""}"`;
     })
     .join("\n");
-  const summary = `\n\nSummary\nDB Users,${data.dbTotalUsers}\nClerk Users,${data.totalUsers}\nArticles,${data.totalArticles}\nGrowth Rate,${data.growthRate.toFixed(1)}%\nExported,"${new Date().toISOString()}"`;
-  const blob = new Blob([header + rows + summary], { type: "text/csv" });
+  const blob = new Blob([header + rows], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `energdive-report-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `energdive-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-// ─── Chart Tooltip ──────────────────────────────────────────────────
-function ChartTooltip({ active, payload, label }: {
-  active?: boolean;
-  payload?: { value: number; name: string; color: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-      <p className="mb-1 text-[11px] font-medium text-gray-400">{label}</p>
-      {payload.map((e, i) => (
-        <p key={i} className="text-sm font-bold" style={{ color: e.color }}>
-          {e.name}: {e.value}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-// ─── Chart Type Switcher ────────────────────────────────────────────
-function ChartSwitch({
-  value,
-  onChange,
-}: {
-  value: ChartVariant;
-  onChange: (v: ChartVariant) => void;
-}) {
+// ─── Chart Switch ─────────────────────────────────────────────────────
+function ChartSwitch({ value, onChange }: { value: ChartVariant; onChange: (v: ChartVariant) => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -180,104 +134,123 @@ function ChartSwitch({
   );
 }
 
-// ─── Flexible Chart: renders data as bar, pie, or area ──────────────
-function FlexChart({
+// ─── ECharts option builders ─────────────────────────────────────────
+function buildPieOption(data: { label: string; count: number }[]): EChartsOption {
+  return {
+    tooltip: {
+      trigger: "item",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      formatter: (p: any) => `<strong>${p.name}</strong><br/>Count: <b>${p.value}</b> (${p.percent}%)`,
+    },
+    color: COLORS,
+    legend: {
+      bottom: 0, icon: "circle", itemWidth: 7,
+      textStyle: { fontSize: 10, color: "#6b7280" }, type: "scroll",
+    },
+    series: [{
+      type: "pie",
+      radius: ["35%", "64%"],
+      center: ["50%", "44%"],
+      data: data.map((d) => ({ name: d.label, value: d.count })),
+      label: { show: false },
+      emphasis: { scale: true, scaleSize: 8, label: { show: true, fontWeight: "bold", fontSize: 12 } },
+    }],
+  };
+}
+
+function buildBarOption(data: { label: string; count: number }[], color?: string): EChartsOption {
+  return {
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    color: COLORS,
+    grid: { left: "3%", right: "6%", top: "4%", bottom: "4%", containLabel: true },
+    xAxis: {
+      type: "value",
+      axisLabel: { color: "#9ca3af", fontSize: 10 },
+      splitLine: { lineStyle: { color: "#f3f4f6" } },
+      axisLine: { show: false },
+    },
+    yAxis: {
+      type: "category",
+      data: data.map((d) => d.label),
+      axisLabel: { color: "#6b7280", fontSize: 11 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+    },
+    series: [{
+      type: "bar",
+      data: data.map((d, i) => ({
+        value: d.count,
+        itemStyle: { color: color || COLORS[i % COLORS.length], borderRadius: [0, 4, 4, 0] },
+      })),
+      barMaxWidth: 20,
+    }],
+  };
+}
+
+function buildAreaOption(data: { label: string; count: number }[], color?: string): EChartsOption {
+  const c = color || COLORS[0];
+  return {
+    tooltip: { trigger: "axis" },
+    grid: { left: "3%", right: "4%", bottom: "4%", top: "4%", containLabel: true },
+    xAxis: {
+      type: "category",
+      data: data.map((d) => d.label),
+      axisLabel: { color: "#9ca3af", fontSize: 10, rotate: data.length > 6 ? 25 : 0 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#f3f4f6" } },
+      axisLabel: { color: "#9ca3af", fontSize: 10 },
+      axisLine: { show: false },
+    },
+    series: [{
+      type: "line", smooth: true,
+      data: data.map((d) => d.count),
+      areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: c + "4D" }, { offset: 1, color: c + "00" }] } },
+      lineStyle: { color: c, width: 2 },
+      itemStyle: { color: c },
+      showSymbol: false,
+    }],
+  };
+}
+
+// ─── FlexEChart ───────────────────────────────────────────────────────
+function FlexEChart({
   data,
   variant,
   color,
-  labelKey = "label",
-  valueKey = "count",
   onSliceClick,
 }: {
   data: { label: string; count: number }[];
   variant: ChartVariant;
   color?: string;
-  labelKey?: string;
-  valueKey?: string;
   onSliceClick?: (label: string) => void;
 }) {
-  if (data.length === 0)
+  const option = useMemo((): EChartsOption => {
+    if (!data.length) return {};
+    if (variant === "pie") return buildPieOption(data);
+    if (variant === "area") return buildAreaOption(data, color);
+    return buildBarOption(data, color);
+  }, [data, variant, color]);
+
+  if (!data.length) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-gray-400">
         No data available
       </div>
     );
-
-  if (variant === "pie") {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            innerRadius={40}
-            outerRadius={70}
-            paddingAngle={2}
-            dataKey={valueKey}
-            nameKey={labelKey}
-            onClick={(e: any) => onSliceClick?.(e[labelKey] || e.name || e.payload?.[labelKey])}
-            cursor={onSliceClick ? "pointer" : "default"}
-          >
-            {data.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />
-            ))}
-          </Pie>
-          <Tooltip />
-          <Legend
-            verticalAlign="bottom"
-            height={36}
-            iconType="circle"
-            iconSize={7}
-            formatter={(v: string) => <span className="text-[11px] text-gray-600">{v}</span>}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-    );
   }
 
-  if (variant === "area") {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
-          <defs>
-            <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color || COLORS[0]} stopOpacity={0.3} />
-              <stop offset="95%" stopColor={color || COLORS[0]} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-          <XAxis dataKey={labelKey} tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} allowDecimals={false} />
-          <Tooltip content={<ChartTooltip />} />
-          <Area type="monotone" dataKey={valueKey} name="Count" stroke={color || COLORS[0]} strokeWidth={2} fill="url(#areaGrad)" />
-        </AreaChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  // Default: bar
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ left: 80 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} allowDecimals={false} />
-        <YAxis type="category" dataKey={labelKey} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} width={75} />
-        <Tooltip content={<ChartTooltip />} />
-        <Bar 
-          dataKey={valueKey} 
-          name="Users" 
-          radius={[0, 4, 4, 0]} 
-          maxBarSize={20}
-          onClick={(e: any) => onSliceClick?.(e[labelKey] || e.name || e.payload?.[labelKey] || e.label)}
-          cursor={onSliceClick ? "pointer" : "default"}
-        >
-          {data.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <ReactECharts
+      option={option}
+      style={{ height: "100%", width: "100%" }}
+      notMerge
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onEvents={onSliceClick ? { click: (p: any) => onSliceClick(p.name || "") } : {}}
+    />
   );
 }
 
@@ -291,26 +264,44 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [stateChart, setStateChart] = useState<ChartVariant>("bar");
   const [salutationChart, setSalutationChart] = useState<ChartVariant>("pie");
   const [dataSourceChart, setDataSourceChart] = useState<ChartVariant>("pie");
-
-  // Filter popup states
+  const [mapReady, setMapReady] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<{ key: string; value: string; label: string } | null>(null);
-  const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<FilteredUser[]>([]);
   const [isDialogLoading, setIsDialogLoading] = useState(false);
   const [dialogPage, setDialogPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
+
+  // Load India GeoJSON from /public/india-states.json and register with ECharts
+  useEffect(() => {
+    fetch("/india-states.json")
+      .then((r) => r.json())
+      .then((raw) => {
+        // Geohacker GeoJSON uses NAME_1 for state name — normalise to 'name'
+        const geoJson = {
+          ...raw,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          features: raw.features.map((f: any) => ({
+            ...f,
+            properties: { ...f.properties, name: f.properties.NAME_1 || f.properties.name || "" },
+          })),
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        echarts.registerMap("India", geoJson as any);
+        setMapReady(true);
+      })
+      .catch(() => { /* silently fall back to bar chart */ });
+  }, []);
 
   const handleChartClick = async (key: string, value: string, label: string) => {
     if (!value) return;
     setSelectedFilter({ key, value, label });
     setIsDialogLoading(true);
     setFilteredUsers([]);
-    setDialogPage(1); // Reset page on new click
+    setDialogPage(1);
     try {
       const res = await fetch(`/api/users/filter?key=${key}&value=${encodeURIComponent(value)}`);
-      const data = await res.json();
-      if (data.users) {
-        setFilteredUsers(data.users);
-      }
+      const json = await res.json();
+      if (json.users) setFilteredUsers(json.users);
     } catch (e) {
       console.error(e);
     } finally {
@@ -318,114 +309,174 @@ export function DashboardClient({ data }: { data: DashboardData }) {
     }
   };
 
-  const now = Date.now();
-  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-
-  const filteredSignups = useMemo(() => filterByRange(data.dailySignups, dateRange), [data.dailySignups, dateRange]);
-  const filteredContent = useMemo(() => filterByRange(data.dailyContent, dateRange), [data.dailyContent, dateRange]);
   const filteredRegistrations = useMemo(() => filterByRange(data.dailyRegistrations, dateRange), [data.dailyRegistrations, dateRange]);
+  const filteredContent = useMemo(() => filterByRange(data.dailyContent, dateRange), [data.dailyContent, dateRange]);
 
-  // KPI stats
   const stats = [
-    {
-      label: "Total Users",
-      value: data.dbTotalUsers || data.totalUsers,
-      icon: Users,
-      accent: "border-l-emerald-500",
-      iconColor: "text-emerald-600",
-      trend: trendPct(data.newThisMonth, data.newPrevMonth),
-      trendUp: data.newThisMonth >= data.newPrevMonth,
-      sub: "vs prev month",
-    },
-    {
-      label: "New This Month",
-      value: data.growthThisMonth || data.newThisMonth,
-      icon: UserPlus,
-      accent: "border-l-blue-500",
-      iconColor: "text-blue-600",
-      trend: trendPct(data.growthThisMonth, data.growthLastMonth),
-      trendUp: data.growthThisMonth >= data.growthLastMonth,
-      sub: "registrations",
-    },
-    {
-      label: "Active (7 Days)",
-      value: data.activeLast7Days,
-      icon: Activity,
-      accent: "border-l-violet-500",
-      iconColor: "text-violet-600",
-      trend: trendPct(data.activeLast7Days, data.activePrev7Days),
-      trendUp: data.activeLast7Days >= data.activePrev7Days,
-      sub: "vs prev 7 days",
-    },
-    {
-      label: "Total Articles",
-      value: data.totalArticles,
-      icon: FileText,
-      accent: "border-l-orange-500",
-      iconColor: "text-orange-600",
-      trend: trendPct(data.articlesThisMonth, data.articlesPrevMonth),
-      trendUp: data.articlesThisMonth >= data.articlesPrevMonth,
-      sub: "published this month",
-    },
-    {
-      label: "Growth Rate",
-      value: `${data.growthRate >= 0 ? "+" : ""}${data.growthRate.toFixed(1)}%`,
-      icon: TrendingUp,
-      accent: "border-l-cyan-500",
-      iconColor: "text-cyan-600",
-      trend: data.growthRate >= 0 ? "Positive growth" : "Declining",
-      trendUp: data.growthRate >= 0,
-      sub: "month-over-month",
-      isPercent: true,
-    },
+    { label: "Total Users", value: data.dbTotalUsers || data.totalUsers, icon: Users, accent: "border-l-emerald-500", iconColor: "text-emerald-600", trend: trendPct(data.newThisMonth, data.newPrevMonth), trendUp: data.newThisMonth >= data.newPrevMonth, sub: "vs prev month" },
+    { label: "New This Month", value: data.growthThisMonth || data.newThisMonth, icon: UserPlus, accent: "border-l-blue-500", iconColor: "text-blue-600", trend: trendPct(data.growthThisMonth, data.growthLastMonth), trendUp: data.growthThisMonth >= data.growthLastMonth, sub: "registrations" },
+    { label: "Active (7 Days)", value: data.activeLast7Days, icon: Activity, accent: "border-l-violet-500", iconColor: "text-violet-600", trend: trendPct(data.activeLast7Days, data.activePrev7Days), trendUp: data.activeLast7Days >= data.activePrev7Days, sub: "vs prev 7 days" },
+    { label: "Total Articles", value: data.totalArticles, icon: FileText, accent: "border-l-orange-500", iconColor: "text-orange-600", trend: trendPct(data.articlesThisMonth, data.articlesPrevMonth), trendUp: data.articlesThisMonth >= data.articlesPrevMonth, sub: "published this month" },
+    { label: "Growth Rate", value: `${data.growthRate >= 0 ? "+" : ""}${data.growthRate.toFixed(1)}%`, icon: TrendingUp, accent: "border-l-cyan-500", iconColor: "text-cyan-600", trend: data.growthRate >= 0 ? "Positive growth" : "Declining", trendUp: data.growthRate >= 0, sub: "month-over-month" },
   ];
 
-  // Funnel
-  const funnelPct30 = data.userJourney.total > 0 ? Math.round((data.userJourney.activeWithin30d / data.userJourney.total) * 100) : 0;
-  const funnelPct7 = data.userJourney.total > 0 ? Math.round((data.userJourney.activeWithin7d / data.userJourney.total) * 100) : 0;
-  const neverPct = data.userJourney.total > 0 ? Math.round((data.userJourney.neverSignedIn / data.userJourney.total) * 100) : 0;
+  // ─── ECharts options ─────────────────────────────────────────────
+  const registrationOption = useMemo((): EChartsOption => ({
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" } },
+    color: ["#10b981"],
+    grid: { left: "3%", right: "4%", bottom: "3%", top: "5%", containLabel: true },
+    xAxis: {
+      type: "category",
+      data: filteredRegistrations.map((d) => d.date),
+      axisLabel: { color: "#9ca3af", fontSize: 10, formatter: (v: string) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; } },
+      axisLine: { show: false }, axisTick: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#f3f4f6" } },
+      axisLabel: { color: "#9ca3af", fontSize: 10 }, axisLine: { show: false },
+    },
+    series: [{
+      name: "Registrations", type: "line", smooth: true,
+      data: filteredRegistrations.map((d) => d.count),
+      lineStyle: { color: "#10b981", width: 2.5 },
+      itemStyle: { color: "#10b981" },
+      areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(16,185,129,0.3)" }, { offset: 1, color: "rgba(16,185,129,0)" }] } },
+      showSymbol: false,
+    }],
+  }), [filteredRegistrations]);
+
+  const contentBarOption = useMemo((): EChartsOption => ({
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    color: ["#3b82f6"],
+    grid: { left: "3%", right: "4%", bottom: "4%", top: "5%", containLabel: true },
+    xAxis: {
+      type: "category",
+      data: filteredContent.map((d) => d.date),
+      axisLabel: { color: "#9ca3af", fontSize: 10, formatter: (v: string) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; } },
+      axisLine: { show: false }, axisTick: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#f3f4f6" } },
+      axisLabel: { color: "#9ca3af", fontSize: 10 }, axisLine: { show: false },
+    },
+    series: [{
+      name: "Articles", type: "bar",
+      data: filteredContent.map((d) => d.count),
+      itemStyle: { color: "#3b82f6", borderRadius: [4, 4, 0, 0] },
+      barMaxWidth: 28,
+    }],
+  }), [filteredContent]);
+
+  const contentTypeOption = useMemo((): EChartsOption => ({
+    tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
+    color: COLORS,
+    legend: { bottom: 0, icon: "circle", itemWidth: 7, textStyle: { fontSize: 10, color: "#6b7280" }, type: "scroll" },
+    series: [{
+      type: "pie", radius: ["40%", "70%"], center: ["50%", "44%"],
+      data: data.contentByType.map((d) => ({ name: d.type, value: d.count })),
+      label: { show: false },
+      emphasis: { scale: true, scaleSize: 6, label: { show: true, fontWeight: "bold" } },
+    }],
+  }), [data.contentByType]);
+
+  const weeklyOption = useMemo((): EChartsOption => ({
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    color: ["#10b981", "#8b5cf6"],
+    legend: { top: 0, icon: "circle", itemWidth: 8, textStyle: { fontSize: 11, color: "#6b7280" } },
+    grid: { left: "3%", right: "4%", bottom: "3%", top: "40px", containLabel: true },
+    xAxis: {
+      type: "category",
+      data: data.weeklyActivity.map((d) => d.day),
+      axisLabel: { color: "#9ca3af", fontSize: 11 },
+      axisLine: { show: false }, axisTick: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "#f3f4f6" } },
+      axisLabel: { color: "#9ca3af", fontSize: 10 }, axisLine: { show: false },
+    },
+    series: [
+      { name: "Signups", type: "bar", data: data.weeklyActivity.map((d) => d.signups), itemStyle: { borderRadius: [3, 3, 0, 0] }, barMaxWidth: 24 },
+      { name: "Logins",  type: "bar", data: data.weeklyActivity.map((d) => d.logins),  itemStyle: { borderRadius: [3, 3, 0, 0] }, barMaxWidth: 24 },
+    ],
+  }), [data.weeklyActivity]);
+
+  const funnelOption = useMemo((): EChartsOption => {
+    const total = data.userJourney.total || 1;
+    // Only sequential steps — "Never Signed In" is a branch, not a step, so excluded here
+    const steps = [
+      { name: "Total Registered", value: data.userJourney.total,          color: "#6366f1" },
+      { name: "Active (30 Days)", value: data.userJourney.activeWithin30d, color: "#3b82f6" },
+      { name: "Active (7 Days)",  value: data.userJourney.activeWithin7d,  color: "#10b981" },
+    ];
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tooltip: { trigger: "item", formatter: (p: any) => `<strong>${p.name}</strong><br/>Users: <b>${Number(p.value).toLocaleString()}</b><br/>${Math.round((Number(p.value) / total) * 100)}% of total` },
+      color: steps.map((s) => s.color),
+      series: [{
+        type: "funnel",
+        left: "10%", width: "80%", min: 0, max: total,
+        sort: "descending", gap: 6,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        label: { show: true, position: "inside", color: "#fff", fontWeight: "bold", fontSize: 12, formatter: (p: any) => `${p.name}   ${Number(p.value).toLocaleString()}` },
+        labelLine: { show: false },
+        itemStyle: { borderWidth: 0 },
+        data: steps.map((s) => ({ name: s.name, value: s.value, itemStyle: { color: s.color } })),
+      }],
+    };
+  }, [data.userJourney]);
+
+
+  const indiaMapOption = useMemo((): EChartsOption => {
+    const mapData = data.byState.map((s) => ({ name: normalizeState(s.label), value: s.count }));
+    const maxVal = Math.max(...data.byState.map((s) => s.count), 1);
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tooltip: { trigger: "item", formatter: (p: any) => `<strong>${p.name}</strong><br/>Users: <b>${p.value ?? 0}</b>` },
+      visualMap: {
+        min: 0, max: maxVal, left: "left", bottom: 10,
+        text: ["High", "Low"], calculable: true,
+        inRange: { color: ["#ecfdf5", "#10b981"] },
+        textStyle: { fontSize: 10, color: "#6b7280" },
+      },
+      series: [{
+        name: "Users", type: "map", map: "India", roam: true,
+        data: mapData,
+        label: { show: false },
+        emphasis: { label: { show: true, fontSize: 10, fontWeight: "bold" }, itemStyle: { areaColor: "#059669" } },
+        itemStyle: { areaColor: "#f0fdf4", borderColor: "#a1a1aa", borderWidth: 0.8 },
+      }],
+    };
+  }, [data.byState]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      {/* ── Header + Filters ────────────────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-            Analytics Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Real-time intelligence · Clerk + Strapi + Database
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Analytics Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-500">Real-time intelligence · Clerk + Strapi + Database</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-gray-200 bg-white p-0.5 shadow-sm">
             {DATE_PRESETS.map((p) => (
-              <button
-                key={p.value}
-                onClick={() => setDateRange(p.value)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
-                  dateRange === p.value
-                    ? "bg-emerald-500 text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
+              <button key={p.value} onClick={() => setDateRange(p.value)}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${dateRange === p.value ? "bg-emerald-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-900"}`}>
                 {p.label}
               </button>
             ))}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
+          <Button variant="outline" size="sm"
             className="gap-1.5 border-gray-200 text-gray-600 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-            onClick={() => exportCSV(data)}
-          >
-            <Download className="h-3.5 w-3.5" />
-            Export
+            onClick={() => exportCSV(data)}>
+            <Download className="h-3.5 w-3.5" /> Export
           </Button>
         </div>
       </div>
 
-      {/* ── Quick Actions ───────────────────────────────────────── */}
+      {/* ── Quick Actions ──────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {[
           { label: "Add User", icon: UserPlus, href: "/users" },
@@ -435,22 +486,16 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         ].map((a) => (
           <Link key={a.label} href={a.href}>
             <Button variant="outline" className="w-full justify-start gap-2 border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">
-              <a.icon className="h-4 w-4" />
-              {a.label}
+              <a.icon className="h-4 w-4" />{a.label}
             </Button>
           </Link>
         ))}
-        <Button
-          variant="outline"
-          className="w-full justify-start gap-2 border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-          onClick={() => exportCSV(data)}
-        >
-          <Download className="h-4 w-4" />
-          Export Report
+        <Button variant="outline" className="w-full justify-start gap-2 border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" onClick={() => exportCSV(data)}>
+          <Download className="h-4 w-4" /> Export Report
         </Button>
       </div>
 
-      {/* ── KPI Stats (5 cards) ─────────────────────────────────── */}
+      {/* ── KPI Cards ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((s) => {
           const Icon = s.icon;
@@ -477,9 +522,8 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         })}
       </div>
 
-      {/* ── Row 1: Registration Trend + Source Breakdown ─────────── */}
+      {/* ── Row 1: Registration Trend + Source ────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        {/* Daily Registrations (DB) */}
         <Card className="lg:col-span-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
@@ -491,26 +535,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           <CardContent>
             <div className="h-[220px] w-full">
               {filteredRegistrations.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={filteredRegistrations}>
-                    <defs>
-                      <linearGradient id="regGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10, fill: "#9ca3af" }}
-                      tickFormatter={(v: string) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }}
-                      axisLine={false} tickLine={false}
-                    />
-                    <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="count" name="Registrations" stroke="#10b981" strokeWidth={2} fill="url(#regGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <ReactECharts option={registrationOption} style={{ height: "100%", width: "100%" }} notMerge />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-gray-400">No registration data for this period</div>
               )}
@@ -518,7 +543,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardContent>
         </Card>
 
-        {/* Source Breakdown */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
@@ -529,19 +553,14 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[220px] w-full">
-              <FlexChart 
-                data={data.bySource} 
-                variant={sourceChart} 
-                onSliceClick={(v) => handleChartClick("source", v, "Source")}
-              />
+              <FlexEChart data={data.bySource} variant={sourceChart} onSliceClick={(v) => handleChartClick("source", v, "Source")} />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Row 2: Industry + Data Source ────────────────────────── */}
+      {/* ── Row 2: Industry + Acquisition ─────────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Industry Breakdown */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
@@ -552,17 +571,11 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              <FlexChart 
-                data={data.byIndustry.slice(0, 12)} 
-                variant={industryChart} 
-                color="#8b5cf6" 
-                onSliceClick={(v) => handleChartClick("industry", v, "Industry")}
-              />
+              <FlexEChart data={data.byIndustry.slice(0, 12)} variant={industryChart} color="#8b5cf6" onSliceClick={(v) => handleChartClick("industry", v, "Industry")} />
             </div>
           </CardContent>
         </Card>
 
-        {/* Data Source (Zoho vs Organic) */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
@@ -573,41 +586,35 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              <FlexChart 
-                data={data.byDataSource} 
-                variant={dataSourceChart} 
-                color="#f59e0b" 
-                onSliceClick={(v) => handleChartClick("data_source", v, "Acquisition Channel")}
-              />
+              <FlexEChart data={data.byDataSource} variant={dataSourceChart} color="#f59e0b" onSliceClick={(v) => handleChartClick("data_source", v, "Acquisition Channel")} />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Row 3: State + Salutation ──────────────────────────── */}
+      {/* ── Row 3: State Map + Salutation ─────────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* State-wise */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-rose-500" />
               <CardTitle className="text-sm font-semibold text-gray-900">Users by State</CardTitle>
             </div>
-            <ChartSwitch value={stateChart} onChange={setStateChart} />
+            {mapReady
+              ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">🗺 India Map</span>
+              : <ChartSwitch value={stateChart} onChange={setStateChart} />}
           </CardHeader>
           <CardContent>
-            <div className="h-[280px] w-full">
-              <FlexChart 
-                data={data.byState.slice(0, 10)} 
-                variant={stateChart} 
-                color="#f43f5e" 
-                onSliceClick={(v) => handleChartClick("state", v, "State")}
-              />
+            <div className="h-[340px] w-full">
+              {mapReady ? (
+                <ReactECharts option={indiaMapOption} style={{ height: "100%", width: "100%" }} notMerge />
+              ) : (
+                <FlexEChart data={data.byState.slice(0, 12)} variant={stateChart} color="#f43f5e" onSliceClick={(v) => handleChartClick("state", v, "State")} />
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Salutation-wise */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
@@ -618,20 +625,14 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[280px] w-full">
-              <FlexChart 
-                data={data.bySalutation} 
-                variant={salutationChart} 
-                color="#06b6d4" 
-                onSliceClick={(v) => handleChartClick("salutation", v, "Salutation")}
-              />
+              <FlexEChart data={data.bySalutation} variant={salutationChart} color="#06b6d4" onSliceClick={(v) => handleChartClick("salutation", v, "Salutation")} />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Row 4: Content Charts ───────────────────────────────── */}
+      {/* ── Row 4: Content Published + Content by Type ─────────  */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        {/* Content Published Over Time */}
         <Card className="lg:col-span-3">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="flex items-center gap-2">
@@ -642,15 +643,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           <CardContent>
             <div className="h-[200px] w-full">
               {filteredContent.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={filteredContent}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v: string) => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="count" name="Articles" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <ReactECharts option={contentBarOption} style={{ height: "100%", width: "100%" }} notMerge />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-gray-400">No published content for this period</div>
               )}
@@ -658,7 +651,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </CardContent>
         </Card>
 
-        {/* Content by Type Donut */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
@@ -669,17 +661,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           <CardContent>
             <div className="h-[200px] w-full">
               {data.contentByType.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={data.contentByType} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="count" nameKey="type">
-                      {data.contentByType.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={7} formatter={(v: string) => <span className="text-[11px] text-gray-600">{v}</span>} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <ReactECharts option={contentTypeOption} style={{ height: "100%", width: "100%" }} notMerge />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-gray-400">No content data</div>
               )}
@@ -688,7 +670,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         </Card>
       </div>
 
-      {/* ── User Journey Funnel ─────────────────────────────────── */}
+      {/* ── User Journey Funnel (ECharts) ──────────────────────── */}
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
@@ -697,27 +679,13 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-            {[
-              { label: "Total Registered", value: data.userJourney.total, pct: 100, color: "bg-gray-400" },
-              { label: "Active (30 Days)", value: data.userJourney.activeWithin30d, pct: funnelPct30, color: "bg-blue-500" },
-              { label: "Active (7 Days)", value: data.userJourney.activeWithin7d, pct: funnelPct7, color: "bg-emerald-500" },
-              { label: "Never Signed In", value: data.userJourney.neverSignedIn, pct: neverPct, color: "bg-red-400" },
-            ].map((f) => (
-              <div key={f.label} className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/50 p-4">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">{f.label}</p>
-                <p className="font-mono text-2xl font-bold text-gray-900">{f.value.toLocaleString()}</p>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-                  <div className={`h-full rounded-full ${f.color} transition-all duration-700`} style={{ width: `${f.pct}%` }} />
-                </div>
-                <p className="text-right text-[11px] font-semibold text-gray-600">{f.pct}%</p>
-              </div>
-            ))}
+          <div className="h-[200px] w-full">
+            <ReactECharts option={funnelOption} style={{ height: "100%", width: "100%" }} notMerge />
           </div>
         </CardContent>
       </Card>
 
-      {/* ── Weekly Activity ─────────────────────────────────────── */}
+      {/* ── Weekly Activity ────────────────────────────────────── */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div className="flex items-center gap-2">
@@ -727,22 +695,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         </CardHeader>
         <CardContent>
           <div className="h-[180px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.weeklyActivity}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend verticalAlign="top" height={28} iconType="circle" iconSize={8} formatter={(v: string) => <span className="text-[11px] text-gray-600">{v}</span>} />
-                <Bar dataKey="signups" name="Signups" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={24} />
-                <Bar dataKey="logins" name="Logins" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ReactECharts option={weeklyOption} style={{ height: "100%", width: "100%" }} notMerge />
           </div>
         </CardContent>
       </Card>
 
-      {/* ── Recent Users + Recent Content ────────────────────────── */}
+      {/* ── Recent Users + Recent Content ──────────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -767,19 +725,14 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                     <TableCell className="pl-6">
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          {u.salutation ? `${u.salutation} ` : ""}
-                          {u.first_name || ""} {u.last_name || ""}
+                          {u.salutation ? `${u.salutation} ` : ""}{u.first_name || ""} {u.last_name || ""}
                           {!u.first_name && !u.last_name && <span className="italic text-gray-400">Unknown</span>}
                         </p>
                         <p className="font-mono text-[11px] text-gray-400">{u.email}</p>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="text-[11px]">{u.source || "—"}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-gray-500">{u.state || "—"}</span>
-                    </TableCell>
+                    <TableCell><Badge variant="secondary" className="text-[11px]">{u.source || "—"}</Badge></TableCell>
+                    <TableCell><span className="text-xs text-gray-500">{u.state || "—"}</span></TableCell>
                     <TableCell className="pr-6 text-right">
                       <span className="text-xs text-gray-500">
                         {u.created_at ? new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
@@ -819,7 +772,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         </Card>
       </div>
 
-      {/* ── Bottom Nav Tabs ─────────────────────────────────────── */}
+      {/* ── Bottom Nav Tabs ────────────────────────────────────── */}
       <Tabs defaultValue="users" className="w-full">
         <TabsList>
           <TabsTrigger value="users">Users</TabsTrigger>
@@ -833,9 +786,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 <p className="text-sm font-medium text-gray-900">User Management</p>
                 <p className="text-xs text-gray-500">View and manage all {data.dbTotalUsers || data.totalUsers} registered users.</p>
               </div>
-              <Link href="/users">
-                <Badge className="cursor-pointer gap-1 bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-800">Go to Users <ArrowRight className="h-3 w-3" /></Badge>
-              </Link>
+              <Link href="/users"><Badge className="cursor-pointer gap-1 bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-800">Go to Users <ArrowRight className="h-3 w-3" /></Badge></Link>
             </CardContent>
           </Card>
         </TabsContent>
@@ -846,9 +797,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 <p className="text-sm font-medium text-gray-900">Content Management</p>
                 <p className="text-xs text-gray-500">Browse all {data.totalArticles} articles synced from Strapi.</p>
               </div>
-              <Link href="/content">
-                <Badge className="cursor-pointer gap-1 bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-800">Go to Content <ArrowRight className="h-3 w-3" /></Badge>
-              </Link>
+              <Link href="/content"><Badge className="cursor-pointer gap-1 bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-800">Go to Content <ArrowRight className="h-3 w-3" /></Badge></Link>
             </CardContent>
           </Card>
         </TabsContent>
@@ -859,92 +808,68 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 <p className="text-sm font-medium text-gray-900">User Activity Tracking</p>
                 <p className="text-xs text-gray-500">View detailed user journeys, page views, and activity logs.</p>
               </div>
-              <Link href="/user-activity">
-                <Badge className="cursor-pointer gap-1 bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-800">Go to Activity <ArrowRight className="h-3 w-3" /></Badge>
-              </Link>
+              <Link href="/user-activity"><Badge className="cursor-pointer gap-1 bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-800">Go to Activity <ArrowRight className="h-3 w-3" /></Badge></Link>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* ── Filtered Users Dialog ─────────────────────────────── */}
+      {/* ── Filtered Users Dialog ──────────────────────────────── */}
       <Dialog open={!!selectedFilter} onOpenChange={(open) => !open && setSelectedFilter(null)}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold">
+        <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[85vh] p-0 overflow-hidden flex flex-col gap-0 border-none shadow-2xl">
+          <DialogHeader className="px-6 py-4 border-b border-gray-100 bg-white/50 backdrop-blur-sm sticky top-0 z-10 flex-shrink-0">
+            <DialogTitle className="text-xl font-bold tracking-tight text-gray-900">
               {selectedFilter?.label}: <span className="text-emerald-600">{selectedFilter?.value}</span>
             </DialogTitle>
           </DialogHeader>
-          <div className="mt-4">
+          <div className="flex-1 overflow-y-auto bg-gray-50/30 p-6">
             {isDialogLoading ? (
               <div className="py-12 flex justify-center text-sm text-gray-500">Loading user data...</div>
             ) : filteredUsers.length > 0 ? (
-              <div className="flex flex-col gap-4">
-                <div className="overflow-x-auto rounded-md border border-gray-200 shadow-sm">
-                  <Table className="w-full min-w-[500px]">
-                    <TableHeader>
-                      <TableRow className="bg-gray-50/50">
-                        <TableHead className="w-[40%] text-[11px] font-semibold uppercase tracking-wider text-gray-500">Name</TableHead>
-                        <TableHead className="w-[30%] text-[11px] font-semibold uppercase tracking-wider text-gray-500">Organization</TableHead>
-                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Source</TableHead>
-                        <TableHead className="text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Joined</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredUsers.slice((dialogPage - 1) * ITEMS_PER_PAGE, dialogPage * ITEMS_PER_PAGE).map((u) => (
-                        <TableRow key={u.id} className="transition-colors hover:bg-gray-50/60">
-                          <TableCell className="max-w-[200px]">
-                            <p className="truncate text-sm font-medium text-gray-900">
-                              {u.salutation ? `${u.salutation} ` : ""}
-                              {u.first_name || ""} {u.last_name || ""}
-                            </p>
-                            <p className="truncate text-[11px] text-gray-500">{u.email}</p>
-                            {u.job_title && <p className="truncate text-[10px] text-gray-400">{u.job_title}</p>}
-                          </TableCell>
-                          <TableCell className="max-w-[150px]">
-                            <span className="truncate block text-xs text-gray-600" title={u.organization || ""}>
-                              {u.organization || "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="whitespace-nowrap text-[10px]">{u.source || "—"}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="whitespace-nowrap text-xs text-gray-500">
-                              {u.created_at ? new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                            </span>
-                          </TableCell>
+              <div className="flex flex-col gap-4 h-full">
+                <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden flex-shrink-0">
+                  <div className="overflow-x-auto">
+                    <Table className="w-full">
+                      <TableHeader>
+                        <TableRow className="bg-gray-50/80 hover:bg-gray-50/80 border-b border-gray-100">
+                          <TableHead className="w-[35%] text-[11px] font-semibold uppercase tracking-wider text-gray-500 py-3">User Profile</TableHead>
+                          <TableHead className="w-[30%] text-[11px] font-semibold uppercase tracking-wider text-gray-500 py-3">Organization</TableHead>
+                          <TableHead className="w-[15%] text-[11px] font-semibold uppercase tracking-wider text-gray-500 py-3">Source</TableHead>
+                          <TableHead className="w-[20%] text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500 py-3">Joined Date</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredUsers.slice((dialogPage - 1) * ITEMS_PER_PAGE, dialogPage * ITEMS_PER_PAGE).map((u) => (
+                          <TableRow key={u.id} className="transition-colors hover:bg-gray-50/60 group">
+                            <TableCell className="w-[35%] py-3">
+                              <p className="truncate font-medium text-sm text-gray-900 pr-2">
+                                {u.salutation ? `${u.salutation} ` : ""}{u.first_name || ""} {u.last_name || ""}
+                                {!u.first_name && !u.last_name && <span className="italic text-gray-400">Unknown</span>}
+                              </p>
+                              <p className="truncate text-[12px] text-gray-500 pr-2 mt-0.5">{u.email}</p>
+                              {u.job_title && <p className="truncate text-[11px] text-gray-400 pr-2 mt-0.5 font-medium">{u.job_title}</p>}
+                            </TableCell>
+                            <TableCell className="w-[30%] py-3"><span className="truncate block text-xs text-gray-700 pr-2">{u.organization || "—"}</span></TableCell>
+                            <TableCell className="w-[15%] py-3"><Badge variant="secondary" className="text-[10px]">{u.source || "—"}</Badge></TableCell>
+                            <TableCell className="w-[20%] py-3 text-right">
+                              <span className="whitespace-nowrap text-xs text-gray-500 pr-2">
+                                {u.created_at ? new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-                
-                {/* Pagination Controls */}
                 {filteredUsers.length > ITEMS_PER_PAGE && (
-                  <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                  <div className="flex items-center justify-between border border-gray-200 bg-white rounded-lg px-4 py-3 shadow-sm mt-auto">
                     <p className="text-[11px] text-gray-500">
-                      Showing <span className="font-medium text-gray-900">{(dialogPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-medium text-gray-900">{Math.min(dialogPage * ITEMS_PER_PAGE, filteredUsers.length)}</span> of <span className="font-medium text-gray-900">{filteredUsers.length}</span> results
+                      Showing <span className="font-medium text-gray-900">{(dialogPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-medium text-gray-900">{Math.min(dialogPage * ITEMS_PER_PAGE, filteredUsers.length)}</span> of <span className="font-medium text-gray-900">{filteredUsers.length}</span>
                     </p>
                     <div className="flex items-center gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={() => setDialogPage((p) => Math.max(1, p - 1))}
-                        disabled={dialogPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={() => setDialogPage((p) => Math.min(Math.ceil(filteredUsers.length / ITEMS_PER_PAGE), p + 1))}
-                        disabled={dialogPage >= Math.ceil(filteredUsers.length / ITEMS_PER_PAGE)}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setDialogPage((p) => Math.max(1, p - 1))} disabled={dialogPage === 1}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setDialogPage((p) => Math.min(Math.ceil(filteredUsers.length / ITEMS_PER_PAGE), p + 1))} disabled={dialogPage >= Math.ceil(filteredUsers.length / ITEMS_PER_PAGE)}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 )}

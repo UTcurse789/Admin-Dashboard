@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -13,7 +14,6 @@ import {
   Menu,
   LogOut,
   Activity,
-  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,9 +50,12 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-16 items-center px-5">
-        <img
+        <Image
           src="/energdive-logo.png"
           alt="EnerDive"
+          width={128}
+          height={32}
+          priority
           className="h-8 w-auto"
         />
       </div>
