@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -26,7 +26,7 @@ interface EnrichedUser {
   source: string | null;
   state: string | null;
   onboarding_completed: boolean | null;
-  created_at: string | null;
+  created_at: Date | null;
   lastSignIn: number | null;
   isActive: boolean;
   isRecent: boolean;
@@ -55,57 +55,66 @@ const FILTER_FIELDS: FilterField[] = [
   },
 ];
 
+function filterUsers(users: EnrichedUser[], rules: FilterRule[]) {
+  if (rules.length === 0) {
+    return users;
+  }
+
+  let result = [...users];
+
+  for (const rule of rules) {
+    if (!rule.value) continue;
+    const searchVal = rule.value.toLowerCase();
+
+    result = result.filter((u) => {
+      let fieldVal = "";
+
+      if (rule.field === "name") {
+        fieldVal = `${u.first_name || ""} ${u.last_name || ""} ${u.email}`.toLowerCase();
+      } else if (rule.field === "organization") {
+        fieldVal = (u.organization || "").toLowerCase();
+      } else if (rule.field === "source") {
+        fieldVal = (u.source || "").toLowerCase();
+      } else if (rule.field === "state") {
+        fieldVal = (u.state || "").toLowerCase();
+      } else if (rule.field === "onboarded") {
+        fieldVal = u.onboarding_completed ? "true" : "false";
+      } else if (rule.field === "activity") {
+        if (u.isActive) fieldVal = "active";
+        else if (u.isRecent) fieldVal = "recent";
+        else fieldVal = "inactive";
+      }
+
+      if (rule.operator === "equals") {
+        return fieldVal === searchVal;
+      } else if (rule.operator === "not_equals") {
+        return fieldVal !== searchVal;
+      } else if (rule.operator === "contains") {
+        return fieldVal.includes(searchVal);
+      }
+
+      return true;
+    });
+  }
+
+  return result;
+}
+
 export function UserActivityClient({
   enrichedUsers,
   totalDbUsers,
 }: UserActivityClientProps) {
+  const [activeRules, setActiveRules] = useState<FilterRule[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<EnrichedUser[]>(enrichedUsers);
 
   const applyFilters = useCallback((rules: FilterRule[]) => {
-    if (rules.length === 0) {
-      setFilteredUsers(enrichedUsers);
-      return;
-    }
-
-    let result = [...enrichedUsers];
-
-    for (const rule of rules) {
-      if (!rule.value) continue;
-      const searchVal = rule.value.toLowerCase();
-
-      result = result.filter((u) => {
-        let fieldVal = "";
-
-        if (rule.field === "name") {
-          fieldVal = `${u.first_name || ""} ${u.last_name || ""} ${u.email}`.toLowerCase();
-        } else if (rule.field === "organization") {
-          fieldVal = (u.organization || "").toLowerCase();
-        } else if (rule.field === "source") {
-          fieldVal = (u.source || "").toLowerCase();
-        } else if (rule.field === "state") {
-          fieldVal = (u.state || "").toLowerCase();
-        } else if (rule.field === "onboarded") {
-          fieldVal = u.onboarding_completed ? "true" : "false";
-        } else if (rule.field === "activity") {
-          if (u.isActive) fieldVal = "active";
-          else if (u.isRecent) fieldVal = "recent";
-          else fieldVal = "inactive";
-        }
-
-        if (rule.operator === "equals") {
-          return fieldVal === searchVal;
-        } else if (rule.operator === "not_equals") {
-          return fieldVal !== searchVal;
-        } else if (rule.operator === "contains") {
-          return fieldVal.includes(searchVal);
-        }
-
-        return true;
-      });
-    }
-
-    setFilteredUsers(result);
+    setActiveRules(rules);
+    setFilteredUsers(filterUsers(enrichedUsers, rules));
   }, [enrichedUsers]);
+
+  useEffect(() => {
+    setFilteredUsers(filterUsers(enrichedUsers, activeRules));
+  }, [activeRules, enrichedUsers]);
 
   return (
     <div className="space-y-4">

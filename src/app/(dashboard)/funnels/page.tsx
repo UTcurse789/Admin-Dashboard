@@ -4,6 +4,37 @@ import { FunnelsClient } from "./FunnelsClient";
 
 export const dynamic = "force-dynamic";
 
+async function getClerkUsers() {
+  try {
+    const client = await clerkClient();
+    const users: Awaited<ReturnType<typeof client.users.getUserList>>["data"] =
+      [];
+    let offset = 0;
+    const limit = 500;
+
+    while (true) {
+      const response = await client.users.getUserList({
+        limit,
+        offset,
+        orderBy: "-created_at",
+      });
+
+      users.push(...response.data);
+
+      if (response.data.length < limit) {
+        break;
+      }
+
+      offset += limit;
+    }
+
+    return users;
+  } catch (error) {
+    console.error("[Funnels] Clerk fetch failed:", error);
+    return [];
+  }
+}
+
 async function getFunnelData() {
   const [funnelDb, basicDb, clerkRes] = await Promise.all([
     getFunnelAnalytics().catch((e) => {
@@ -14,21 +45,19 @@ async function getFunnelData() {
       console.error("[Funnels] getDbAnalytics failed:", e?.message ?? e);
       return null;
     }),
-    clerkClient().then((c) =>
-      c.users.getUserList({ limit: 500, orderBy: "-created_at" })
-    ),
+    getClerkUsers(),
   ]);
 
   const now = Date.now();
   const sevenDaysAgo  = now - 7  * 24 * 60 * 60 * 1000;
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
-  const totalClerk    = clerkRes.totalCount;
-  const clerkUsers    = clerkRes.data;
+  const clerkUsers    = clerkRes;
+  const totalClerk    = clerkUsers.length;
   const activeWithin7d  = clerkUsers.filter((u) => u.lastSignInAt && u.lastSignInAt >= sevenDaysAgo).length;
   const activeWithin30d = clerkUsers.filter((u) => u.lastSignInAt && u.lastSignInAt >= thirtyDaysAgo).length;
   const neverSignedIn   = clerkUsers.filter((u) => !u.lastSignInAt).length;
-  const everSignedIn    = totalClerk - neverSignedIn;
+  const everSignedIn    = clerkUsers.filter((u) => Boolean(u.lastSignInAt)).length;
 
   // ── Source conversion: prefer funnelDb, fallback to basicDb.bySource ──
   const sourceConversion =

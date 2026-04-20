@@ -291,7 +291,7 @@ export function FunnelsClient({ data }: { data: FunnelData }) {
           {/* Step drop-off annotation row */}
           <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-4">
             {[
-              { from: "Registered → Onboarded",     dropped: totalRegistered - totalOnboarded, color: "text-blue-600", bg: "bg-blue-50" },
+              { from: "Registered → Onboarded",     dropped: Math.max(0, totalRegistered - totalOnboarded), color: "text-blue-600", bg: "bg-blue-50" },
               { from: "Onboarded → Signed In",      dropped: Math.max(0, totalOnboarded - everSignedIn), color: "text-emerald-600", bg: "bg-emerald-50" },
               { from: "Signed In → Active (30d)",   dropped: Math.max(0, everSignedIn - activeWithin30d), color: "text-amber-600", bg: "bg-amber-50" },
               { from: "Active 30d → Active 7d",     dropped: Math.max(0, activeWithin30d - activeWithin7d), color: "text-rose-600", bg: "bg-rose-50" },
@@ -492,8 +492,8 @@ export function FunnelsClient({ data }: { data: FunnelData }) {
               {[
                 {
                   label: "Not Onboarded",
-                  value: totalRegistered - totalOnboarded,
-                  pctVal: pct(totalRegistered - totalOnboarded, totalRegistered),
+                  value: Math.max(0, totalRegistered - totalOnboarded),
+                  pctVal: pct(Math.max(0, totalRegistered - totalOnboarded), totalRegistered),
                   color: "text-amber-600", bg: "bg-amber-100",
                   tip: "Signed up but never finished onboarding.",
                 },

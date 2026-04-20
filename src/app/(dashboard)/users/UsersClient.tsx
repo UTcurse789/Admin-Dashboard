@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import {
   Table,
@@ -29,9 +29,9 @@ interface UsersClientProps {
   totalCount: number;
 }
 
-const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-
 function getUserStatus(user: UserRecord): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } {
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
   if (!user.lastSignInAt) {
     return { label: "Never", variant: "destructive" };
   }
@@ -51,6 +51,17 @@ const avatarColors = [
   "bg-cyan-100 text-cyan-700",
 ];
 
+function hashCode(value: string): number {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return Math.abs(hash);
+}
+
 const FILTER_FIELDS: FilterField[] = [
   { key: "name", label: "User Name", type: "text" },
   { key: "email", label: "Email", type: "text" },
@@ -66,46 +77,55 @@ const FILTER_FIELDS: FilterField[] = [
   },
 ];
 
+function filterUsers(users: UserRecord[], rules: FilterRule[]) {
+  if (rules.length === 0) {
+    return users;
+  }
+
+  let result = [...users];
+
+  for (const rule of rules) {
+    if (!rule.value) continue;
+    const searchVal = rule.value.toLowerCase();
+
+    result = result.filter((u) => {
+      let fieldVal = "";
+
+      if (rule.field === "name") {
+        fieldVal = `${u.firstName} ${u.lastName}`.toLowerCase();
+      } else if (rule.field === "email") {
+        fieldVal = u.email.toLowerCase();
+      } else if (rule.field === "status") {
+        fieldVal = getUserStatus(u).label.toLowerCase();
+      }
+
+      if (rule.operator === "equals") {
+        return fieldVal === searchVal;
+      } else if (rule.operator === "not_equals") {
+        return fieldVal !== searchVal;
+      } else if (rule.operator === "contains") {
+        return fieldVal.includes(searchVal);
+      }
+
+      return true;
+    });
+  }
+
+  return result;
+}
+
 export function UsersClient({ users, totalCount }: UsersClientProps) {
+  const [activeRules, setActiveRules] = useState<FilterRule[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<UserRecord[]>(users);
 
   const applyFilters = useCallback((rules: FilterRule[]) => {
-    if (rules.length === 0) {
-      setFilteredUsers(users);
-      return;
-    }
-
-    let result = [...users];
-
-    for (const rule of rules) {
-      if (!rule.value) continue;
-      const searchVal = rule.value.toLowerCase();
-
-      result = result.filter((u) => {
-        let fieldVal = "";
-
-        if (rule.field === "name") {
-          fieldVal = `${u.firstName} ${u.lastName}`.toLowerCase();
-        } else if (rule.field === "email") {
-          fieldVal = u.email.toLowerCase();
-        } else if (rule.field === "status") {
-          fieldVal = getUserStatus(u).label.toLowerCase();
-        }
-
-        if (rule.operator === "equals") {
-          return fieldVal === searchVal;
-        } else if (rule.operator === "not_equals") {
-          return fieldVal !== searchVal;
-        } else if (rule.operator === "contains") {
-          return fieldVal.includes(searchVal);
-        }
-
-        return true;
-      });
-    }
-
-    setFilteredUsers(result);
+    setActiveRules(rules);
+    setFilteredUsers(filterUsers(users, rules));
   }, [users]);
+
+  useEffect(() => {
+    setFilteredUsers(filterUsers(users, activeRules));
+  }, [activeRules, users]);
 
   return (
     <div className="space-y-4">
@@ -130,9 +150,10 @@ export function UsersClient({ users, totalCount }: UsersClientProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.map((user, index) => {
+              {filteredUsers.map((user) => {
                 const status = getUserStatus(user);
-                const colorClass = avatarColors[index % avatarColors.length];
+                const colorClass =
+                  avatarColors[hashCode(user.id) % avatarColors.length];
                 const initial = user.firstName?.charAt(0) || user.email.charAt(0).toUpperCase();
 
                 return (

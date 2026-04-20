@@ -12,23 +12,47 @@ export const dynamic = "force-dynamic";
 
 async function getUsers() {
   const client = await clerkClient();
-  const response = await client.users.getUserList({
-    limit: 100,
-    orderBy: "-created_at",
-  });
+  const users: Array<{
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    createdAt: number;
+    lastSignInAt: number | null;
+  }> = [];
+  let offset = 0;
+  const limit = 500;
+  let totalCount = 0;
 
-  const users = response.data.map((user) => ({
-    id: user.id,
-    email: user.emailAddresses[0]?.emailAddress || "No email",
-    firstName: user.firstName || "",
-    lastName: user.lastName || "",
-    createdAt: user.createdAt,
-    lastSignInAt: user.lastSignInAt,
-  }));
+  while (true) {
+    const response = await client.users.getUserList({
+      limit,
+      offset,
+      orderBy: "-created_at",
+    });
+
+    users.push(
+      ...response.data.map((user) => ({
+        id: user.id,
+        email: user.emailAddresses[0]?.emailAddress || "No email",
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        createdAt: user.createdAt,
+        lastSignInAt: user.lastSignInAt,
+      }))
+    );
+    totalCount = response.totalCount;
+
+    if (response.data.length < limit) {
+      break;
+    }
+
+    offset += limit;
+  }
 
   return {
-    totalCount: response.totalCount,
-    users: users,
+    totalCount: users.length || totalCount,
+    users,
   };
 }
 
@@ -37,10 +61,13 @@ function buildUserStats(
   totalCount: number
 ) {
   const now = Date.now();
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const monthStart = new Date(now);
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthStartTs = monthStart.getTime();
 
-  const newThisMonth = users.filter((u) => u.createdAt >= thirtyDaysAgo).length;
+  const newThisMonth = users.filter((u) => u.createdAt >= monthStartTs).length;
   const activeLast7Days = users.filter(
     (u) => u.lastSignInAt && u.lastSignInAt >= sevenDaysAgo
   ).length;

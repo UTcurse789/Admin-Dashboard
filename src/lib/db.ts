@@ -1,10 +1,31 @@
 import pg from "pg";
 
-const pool = new pg.Pool({
+const MAX_DAILY_REG_ROWS = Math.max(
+  1,
+  Math.min(
+    Number.parseInt(process.env.MAX_DAILY_REG_ROWS ?? "365", 10) || 365,
+    5000
+  )
+);
+const shouldUseDatabaseSsl =
+  process.env.DATABASE_SSL === "true" ||
+  (process.env.NODE_ENV === "production" &&
+    process.env.DATABASE_SSL !== "false");
+const allowSelfSignedCerts =
+  process.env.ALLOW_SELF_SIGNED_CERTS === "true" &&
+  process.env.NODE_ENV !== "production";
+
+export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ...(shouldUseDatabaseSsl
+    ? { ssl: { rejectUnauthorized: !allowSelfSignedCerts } }
+    : {}),
   max: 5,
   idleTimeoutMillis: 30000,
+});
+
+pool.on("error", (error) => {
+  console.error("Unexpected PostgreSQL pool error:", error);
 });
 
 export interface DbUser {
@@ -19,7 +40,7 @@ export interface DbUser {
   job_title: string | null;
   organization: string | null;
   onboarding_completed: boolean | null;
-  created_at: string | null;
+  created_at: Date | null;
   source: string | null;
   data_source: string | null;
   salutation: string | null;
@@ -39,67 +60,95 @@ export interface DailyCount {
   count: number;
 }
 
+function unwrapSettledRows<T>(
+  result: PromiseSettledResult<T[]>,
+  label: string,
+  fallback: T[],
+  queryErrors: string[]
+) {
+  if (result.status === "fulfilled") {
+    return result.value;
+  }
+
+  const message =
+    result.reason instanceof Error
+      ? result.reason.message
+      : String(result.reason);
+
+  console.error(`DB analytics query failed (${label}):`, result.reason);
+  queryErrors.push(`${label}: ${message}`);
+
+  return fallback;
+}
+
 /**
  * Fetch all database analytics in a single call.
  * Each query is independent so we run them in parallel.
  */
 export async function getDbAnalytics() {
-  const [
-    totalUsersRes,
-    sourceRes,
-    dataSourceRes,
-    salutationRes,
-    industryRes,
-    stateRes,
-    dailyRegRes,
-    growthRes,
-    recentUsersRes,
-  ] = await Promise.all([
+  const results = await Promise.allSettled([
     // 1. Total users
-    pool.query<{ cnt: string }>("SELECT COUNT(*) as cnt FROM users"),
+    pool
+      .query<{ cnt: string }>("SELECT COUNT(*) as cnt FROM users")
+      .then((result) => result.rows),
 
     // 2. Users by source (zoho_form, website, etc.)
-    pool.query<{ source: string | null; cnt: string }>(
-      "SELECT source, COUNT(*) as cnt FROM users GROUP BY source ORDER BY cnt DESC"
-    ),
+    pool
+      .query<{ source: string | null; cnt: string }>(
+        "SELECT source, COUNT(*) as cnt FROM users GROUP BY source ORDER BY cnt DESC"
+      )
+      .then((result) => result.rows),
 
     // 3. Users by data_source
-    pool.query<{ data_source: string | null; cnt: string }>(
-      "SELECT data_source, COUNT(*) as cnt FROM users GROUP BY data_source ORDER BY cnt DESC"
-    ),
+    pool
+      .query<{ data_source: string | null; cnt: string }>(
+        "SELECT data_source, COUNT(*) as cnt FROM users GROUP BY data_source ORDER BY cnt DESC"
+      )
+      .then((result) => result.rows),
 
     // 4. Users by salutation
-    pool.query<{ salutation: string | null; cnt: string }>(
-      "SELECT salutation, COUNT(*) as cnt FROM users WHERE salutation IS NOT NULL GROUP BY salutation ORDER BY cnt DESC"
-    ),
+    pool
+      .query<{ salutation: string | null; cnt: string }>(
+        "SELECT salutation, COUNT(*) as cnt FROM users WHERE salutation IS NOT NULL GROUP BY salutation ORDER BY cnt DESC"
+      )
+      .then((result) => result.rows),
 
     // 5. Users by industry
-    pool.query<{ industry: string; cnt: string }>(
-      `SELECT i.name as industry, COUNT(*) as cnt
+    pool
+      .query<{ industry: string; cnt: string }>(
+        `SELECT i.name as industry, COUNT(*) as cnt
        FROM user_industries ui
        JOIN industry i ON ui.industry_id = i.id
        GROUP BY i.name
        ORDER BY cnt DESC`
-    ),
+      )
+      .then((result) => result.rows),
 
     // 6. Users by state (top 15)
-    pool.query<{ state: string; cnt: string }>(
-      `SELECT state, COUNT(*) as cnt FROM users 
+    pool
+      .query<{ state: string; cnt: string }>(
+        `SELECT state, COUNT(*) as cnt FROM users 
        WHERE state IS NOT NULL AND state != '' 
        GROUP BY state ORDER BY cnt DESC LIMIT 15`
-    ),
+      )
+      .then((result) => result.rows),
 
     // 7. Daily registrations (all time from DB)
-    pool.query<{ date: Date; cnt: string }>(
-      `SELECT DATE(created_at) as date, COUNT(*) as cnt 
+    pool
+      .query<{ date: Date; cnt: string }>(
+        `SELECT DATE(created_at) as date, COUNT(*) as cnt 
        FROM users 
        GROUP BY DATE(created_at) 
-       ORDER BY date`
-    ),
+       ORDER BY DATE(created_at) DESC
+       LIMIT $1`,
+        [MAX_DAILY_REG_ROWS]
+      )
+      .then((result) => result.rows),
 
     // 8. Growth: this month vs last month (for growth rate KPI)
-    pool.query<{ period: string; cnt: string }>(
-      `SELECT 
+    pool
+      .query<{ period: string; cnt: string }>(
+        `SELECT 
          'this_month' as period, COUNT(*) as cnt FROM users 
          WHERE created_at >= DATE_TRUNC('month', NOW())
        UNION ALL
@@ -107,54 +156,100 @@ export async function getDbAnalytics() {
          'last_month' as period, COUNT(*) as cnt FROM users 
          WHERE created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
            AND created_at < DATE_TRUNC('month', NOW())`
-    ),
+      )
+      .then((result) => result.rows),
 
     // 9. Recent 20 users with all fields
-    pool.query<DbUser>(
-      `SELECT id, clerk_id, email, first_name, last_name, phone, country, state,
+    pool
+      .query<DbUser>(
+        `SELECT id, clerk_id, email, first_name, last_name, phone, country, state,
               job_title, organization, onboarding_completed, created_at,
               source, data_source, salutation, registration_method,
               utm_source, utm_medium, utm_campaign
        FROM users ORDER BY created_at DESC LIMIT 20`
-    ),
+      )
+      .then((result) => result.rows),
   ]);
 
-  const totalDbUsers = parseInt(totalUsersRes.rows[0]?.cnt || "0", 10);
+  const queryErrors: string[] = [];
+  const totalUsersRows = unwrapSettledRows(
+    results[0],
+    "total_users",
+    [{ cnt: "0" }],
+    queryErrors
+  );
+  const sourceRows = unwrapSettledRows(results[1], "by_source", [], queryErrors);
+  const dataSourceRows = unwrapSettledRows(
+    results[2],
+    "by_data_source",
+    [],
+    queryErrors
+  );
+  const salutationRows = unwrapSettledRows(
+    results[3],
+    "by_salutation",
+    [],
+    queryErrors
+  );
+  const industryRows = unwrapSettledRows(
+    results[4],
+    "by_industry",
+    [],
+    queryErrors
+  );
+  const stateRows = unwrapSettledRows(results[5], "by_state", [], queryErrors);
+  const dailyRegistrationRows = unwrapSettledRows(
+    results[6],
+    "daily_registrations",
+    [],
+    queryErrors
+  );
+  const growthRows = unwrapSettledRows(results[7], "growth", [], queryErrors);
+  const recentUserRows = unwrapSettledRows(
+    results[8],
+    "recent_users",
+    [],
+    queryErrors
+  );
 
-  const bySource: CountRow[] = sourceRes.rows.map((r) => ({
+  const totalDbUsers = parseInt(totalUsersRows[0]?.cnt || "0", 10);
+
+  const bySource: CountRow[] = sourceRows.map((r) => ({
     label: r.source || "Unknown",
     count: parseInt(r.cnt, 10),
   }));
 
-  const byDataSource: CountRow[] = dataSourceRes.rows.map((r) => ({
+  const byDataSource: CountRow[] = dataSourceRows.map((r) => ({
     label: r.data_source || "Unknown",
     count: parseInt(r.cnt, 10),
   }));
 
-  const bySalutation: CountRow[] = salutationRes.rows.map((r) => ({
+  const bySalutation: CountRow[] = salutationRows.map((r) => ({
     label: r.salutation || "Unknown",
     count: parseInt(r.cnt, 10),
   }));
 
-  const byIndustry: CountRow[] = industryRes.rows.map((r) => ({
+  const byIndustry: CountRow[] = industryRows.map((r) => ({
     label: r.industry,
     count: parseInt(r.cnt, 10),
   }));
 
-  const byState: CountRow[] = stateRes.rows.map((r) => ({
+  const byState: CountRow[] = stateRows.map((r) => ({
     label: r.state,
     count: parseInt(r.cnt, 10),
   }));
 
-  const dailyRegistrations: DailyCount[] = dailyRegRes.rows.map((r) => ({
-    date: new Date(r.date).toISOString().slice(0, 10),
-    count: parseInt(r.cnt, 10),
-  }));
+  const dailyRegistrations: DailyCount[] = dailyRegistrationRows
+    .map((r) => ({
+      date: new Date(r.date).toISOString().slice(0, 10),
+      count: parseInt(r.cnt, 10),
+    }))
+    .reverse();
 
   // Growth rate
   let thisMonthCount = 0;
   let lastMonthCount = 0;
-  growthRes.rows.forEach((r) => {
+  growthRows.forEach((r) => {
     if (r.period === "this_month") thisMonthCount = parseInt(r.cnt, 10);
     if (r.period === "last_month") lastMonthCount = parseInt(r.cnt, 10);
   });
@@ -176,7 +271,8 @@ export async function getDbAnalytics() {
     growthRate,
     thisMonthCount,
     lastMonthCount,
-    recentDbUsers: recentUsersRes.rows,
+    recentDbUsers: recentUserRows,
+    queryErrors,
   };
 }
 
@@ -247,11 +343,10 @@ export async function getFunnelAnalytics() {
     `),
 
     // Overall onboarding totals
-    pool.query<{ total: string; onboarded: string; never_signed_in_est: string }>(`
+    pool.query<{ total: string; onboarded: string }>(`
       SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded,
-        SUM(CASE WHEN clerk_id IS NULL OR clerk_id = '' THEN 1 ELSE 0 END) as never_signed_in_est
+        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
       FROM users
     `),
   ]);
