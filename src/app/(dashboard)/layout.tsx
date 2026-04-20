@@ -40,7 +40,11 @@ function pageTitleFromPath(pathname: string): string {
   if (pathname === "/") return "Dashboard";
   const segment = pathname.split("/").filter(Boolean)[0];
   if (!segment) return "Dashboard";
-  return segment.charAt(0).toUpperCase() + segment.slice(1);
+  return segment
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {

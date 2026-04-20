@@ -111,18 +111,14 @@ function ArticlesTable({
       </TableHeader>
       <TableBody>
         {articles.map((article) => {
-          const truncatedTitle =
-            article.title.length > 50
-              ? article.title.substring(0, 50) + "..."
-              : article.title;
-          const authorInitial = article.author.charAt(0).toUpperCase();
+          const authorInitial = article.author?.charAt(0).toUpperCase() || "?";
 
           return (
             <TableRow key={article.id}>
               <TableCell>
                 <div className="min-w-0">
                   <p className="max-w-[300px] truncate font-medium text-gray-900">
-                    {truncatedTitle}
+                    {article.title}
                   </p>
                   <p className="max-w-[300px] truncate text-xs text-gray-400">
                     /{article.slug}
@@ -138,7 +134,7 @@ function ArticlesTable({
                     </AvatarFallback>
                   </Avatar>
                   <span className="max-w-[120px] truncate text-sm text-gray-600">
-                    {article.author}
+                    {article.author || "Unknown"}
                   </span>
                 </div>
               </TableCell>

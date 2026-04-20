@@ -113,7 +113,7 @@ export function normalizeStrapiArticle(
   return {
     id: article.id,
     title: readString(attrs.Title, "Untitled"),
-    slug: readString(attrs.slug),
+    slug: readString(attrs.slug, `article-${article.id}`),
     publishedAt: readNullableString(attrs.publishedAt),
     date: readNullableString(attrs.Date),
     author:

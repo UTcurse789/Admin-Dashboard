@@ -30,6 +30,29 @@ interface DataFilterProps {
   onFilterChange: (rules: FilterRule[]) => void;
 }
 
+function isFilterOperator(value: unknown): value is FilterOperator {
+  return (
+    value === "equals" ||
+    value === "contains" ||
+    value === "not_equals"
+  );
+}
+
+function isFilterRule(value: unknown): value is FilterRule {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<FilterRule>;
+
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.field === "string" &&
+    isFilterOperator(candidate.operator) &&
+    typeof candidate.value === "string"
+  );
+}
+
 export function DataFilter({ fields, storageKey, onFilterChange }: DataFilterProps) {
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -41,9 +64,16 @@ export function DataFilter({ fields, storageKey, onFilterChange }: DataFilterPro
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setRules(parsed);
+        const restoredRules = Array.isArray(parsed)
+          ? parsed.filter(isFilterRule)
+          : [];
+
+        if (restoredRules.length > 0) {
+          setRules(restoredRules);
           setHasSavedPreset(true);
+          setIsOpen(true);
+        } else {
+          setHasSavedPreset(false);
         }
       } catch (e) {
         console.error("Failed to parse saved filters:", e);
@@ -58,13 +88,23 @@ export function DataFilter({ fields, storageKey, onFilterChange }: DataFilterPro
   }, [rules]);
 
   const addRule = () => {
+    if (fields.length === 0) {
+      setIsOpen(true);
+      return;
+    }
+
     const defaultField = fields[0];
+    const operator: FilterOperator =
+      defaultField.type === "text" ? "contains" : "equals";
+
     setRules((prev) => [
       ...prev,
       {
-        id: Math.random().toString(36).substring(7),
+        id:
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
         field: defaultField.key,
-        operator: defaultField.type === "text" ? "contains" : "equals",
+        operator,
         value: "",
       },
     ]);
@@ -152,7 +192,7 @@ export function DataFilter({ fields, storageKey, onFilterChange }: DataFilterPro
         </div>
       </div>
 
-      {isOpen && rules.length > 0 && (
+      {(isOpen || rules.length > 0) && rules.length > 0 && (
         <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
           {rules.map((rule) => {
             const fieldDef = fields.find((f) => f.key === rule.field);

@@ -82,16 +82,73 @@ function toDateKey(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
+function getEmptyClerkData() {
+  return {
+    totalUsers: 0,
+    newThisMonth: 0,
+    newPrevMonth: 0,
+    activeLast7Days: 0,
+    activePrev7Days: 0,
+    dailySignups: [] as DailyDataPoint[],
+    weeklyActivity: [
+      { day: "Sun", signups: 0, logins: 0 },
+      { day: "Mon", signups: 0, logins: 0 },
+      { day: "Tue", signups: 0, logins: 0 },
+      { day: "Wed", signups: 0, logins: 0 },
+      { day: "Thu", signups: 0, logins: 0 },
+      { day: "Fri", signups: 0, logins: 0 },
+      { day: "Sat", signups: 0, logins: 0 },
+    ],
+    userJourney: {
+      total: 0,
+      activeWithin30d: 0,
+      activeWithin7d: 0,
+      neverSignedIn: 0,
+    },
+    recentUsers: [] as UserRecord[],
+  };
+}
+
+function getEmptyStrapiData() {
+  return {
+    totalArticles: 0,
+    articlesThisMonth: 0,
+    articlesPrevMonth: 0,
+    dailyContent: [] as DailyDataPoint[],
+    contentByType: [] as ContentTypeBreakdown[],
+    recentArticles: [] as ArticleRecord[],
+  };
+}
+
 async function getDashboardData(): Promise<DashboardData> {
   // ── Run Clerk, Strapi, and DB queries in parallel ────────────
-  const [clerkData, strapiData, dbData] = await Promise.all([
+  const [clerkResult, strapiResult, dbResult] = await Promise.allSettled([
     getClerkData(),
     getStrapiData(),
-    getDbAnalytics().catch((e) => {
-      console.error("DB analytics failed:", e);
-      return null;
-    }),
+    getDbAnalytics(),
   ]);
+
+  if (clerkResult.status === "rejected") {
+    console.error("Clerk dashboard data failed:", clerkResult.reason);
+  }
+
+  if (strapiResult.status === "rejected") {
+    console.error("Strapi dashboard data failed:", strapiResult.reason);
+  }
+
+  if (dbResult.status === "rejected") {
+    console.error("DB analytics failed:", dbResult.reason);
+  }
+
+  const clerkData =
+    clerkResult.status === "fulfilled"
+      ? clerkResult.value
+      : getEmptyClerkData();
+  const strapiData =
+    strapiResult.status === "fulfilled"
+      ? strapiResult.value
+      : getEmptyStrapiData();
+  const dbData = dbResult.status === "fulfilled" ? dbResult.value : null;
 
   return {
     ...clerkData,
@@ -113,30 +170,53 @@ async function getDashboardData(): Promise<DashboardData> {
 
 async function getClerkData() {
   const client = await clerkClient();
-  const userRes = await client.users.getUserList({
-    limit: 500,
-    orderBy: "-created_at",
-  });
+  const users: UserRecord[] = [];
+  let offset = 0;
+  const limit = 500;
+  let totalUsers = 0;
 
-  const users: UserRecord[] = userRes.data.map((user) => ({
-    id: user.id,
-    email: user.emailAddresses[0]?.emailAddress || "No email",
-    firstName: user.firstName || "",
-    lastName: user.lastName || "",
-    createdAt: user.createdAt,
-    lastSignInAt: user.lastSignInAt,
-  }));
+  while (true) {
+    const response = await client.users.getUserList({
+      limit,
+      offset,
+      orderBy: "-created_at",
+    });
+
+    users.push(
+      ...response.data.map((user) => ({
+        id: user.id,
+        email: user.emailAddresses[0]?.emailAddress || "No email",
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        createdAt: user.createdAt,
+        lastSignInAt: user.lastSignInAt,
+      }))
+    );
+    totalUsers = response.totalCount;
+
+    if (response.data.length < limit) {
+      break;
+    }
+
+    offset += limit;
+  }
 
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-  const sixtyDaysAgo = now - 60 * 24 * 60 * 60 * 1000;
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
   const fourteenDaysAgo = now - 14 * 24 * 60 * 60 * 1000;
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const startOfPrevMonth = new Date(startOfMonth);
+  startOfPrevMonth.setMonth(startOfPrevMonth.getMonth() - 1);
+  const monthStartTs = startOfMonth.getTime();
+  const prevMonthStartTs = startOfPrevMonth.getTime();
 
-  const totalUsers = userRes.totalCount;
-  const newThisMonth = users.filter((u) => u.createdAt >= thirtyDaysAgo).length;
+  totalUsers = users.length || totalUsers;
+  const newThisMonth = users.filter((u) => u.createdAt >= monthStartTs).length;
   const newPrevMonth = users.filter(
-    (u) => u.createdAt >= sixtyDaysAgo && u.createdAt < thirtyDaysAgo
+    (u) => u.createdAt >= prevMonthStartTs && u.createdAt < monthStartTs
   ).length;
   const activeLast7Days = users.filter(
     (u) => u.lastSignInAt && u.lastSignInAt >= sevenDaysAgo
@@ -198,20 +278,30 @@ async function getClerkData() {
 
 async function getStrapiData() {
   let totalArticles = 0;
-  let allArticles: ArticleRecord[] = [];
+  const allArticles: ArticleRecord[] = [];
   try {
-    const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
-      "/api/contents?populate=*&sort=publishedAt:desc&pagination[limit]=500"
-    );
-    totalArticles = data.meta.pagination.total;
-    allArticles = data.data.map((article) => {
-      const normalized = normalizeStrapiArticle(article);
-      return {
-        title: normalized.title,
-        type: normalized.category,
-        publishedAt: normalized.publishedAt,
-      };
-    });
+    let page = 1;
+    let pageCount = 1;
+
+    while (page <= pageCount) {
+      const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
+        `/api/contents?populate=*&sort=publishedAt:desc&pagination[page]=${page}&pagination[pageSize]=100`
+      );
+
+      totalArticles = data.meta.pagination.total;
+      pageCount = data.meta.pagination.pageCount;
+      allArticles.push(
+        ...data.data.map((article) => {
+          const normalized = normalizeStrapiArticle(article);
+          return {
+            title: normalized.title,
+            type: normalized.category,
+            publishedAt: normalized.publishedAt,
+          };
+        })
+      );
+      page += 1;
+    }
   } catch (e) {
     console.error("Failed to fetch Strapi data:", e);
   }

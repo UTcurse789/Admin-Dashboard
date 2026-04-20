@@ -97,13 +97,31 @@ function contentPillClass(type: string): string {
   return "bg-gray-50 text-gray-600 border-gray-200";
 }
 
+function escapeCsv(value: unknown): string {
+  let stringValue = value == null ? "" : String(value);
+
+  if (/^[=+\-@]/.test(stringValue)) {
+    stringValue = `'${stringValue}`;
+  }
+
+  return `"${stringValue.replace(/"/g, "\"\"")}"`;
+}
+
 function exportCSV(data: DashboardData) {
   const header = "Name,Email,Joined,Source,State,Salutation,Organization\n";
   const rows = data.recentDbUsers
     .map((u) => {
       const name = `${u.first_name || ""} ${u.last_name || ""}`.trim() || "Unknown";
       const joined = u.created_at ? new Date(u.created_at).toISOString().slice(0, 10) : "";
-      return `"${name}","${u.email}","${joined}","${u.source || ""}","${u.state || ""}","${u.salutation || ""}","${u.organization || ""}"`;
+      return [
+        escapeCsv(name),
+        escapeCsv(u.email),
+        escapeCsv(joined),
+        escapeCsv(u.source || ""),
+        escapeCsv(u.state || ""),
+        escapeCsv(u.salutation || ""),
+        escapeCsv(u.organization || ""),
+      ].join(",");
     })
     .join("\n");
   const blob = new Blob([header + rows], { type: "text/csv" });
@@ -258,6 +276,7 @@ function FlexEChart({
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 export function DashboardClient({ data }: { data: DashboardData }) {
+  const FILTER_DIALOG_LIMIT = 1000;
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [industryChart, setIndustryChart] = useState<ChartVariant>("bar");
   const [sourceChart, setSourceChart] = useState<ChartVariant>("pie");
@@ -299,9 +318,23 @@ export function DashboardClient({ data }: { data: DashboardData }) {
     setFilteredUsers([]);
     setDialogPage(1);
     try {
-      const res = await fetch(`/api/users/filter?key=${key}&value=${encodeURIComponent(value)}`);
+      const res = await fetch(
+        `/api/users/filter?key=${key}&value=${encodeURIComponent(value)}&limit=${FILTER_DIALOG_LIMIT}`
+      );
+
+      if (!res.ok) {
+        console.error("Failed to fetch filtered users:", res.status, await res.text());
+        return;
+      }
+
       const json = await res.json();
-      if (json.users) setFilteredUsers(json.users);
+
+      if (Array.isArray(json.users)) {
+        setFilteredUsers(json.users);
+        return;
+      }
+
+      console.error("Invalid filtered users response:", json);
     } catch (e) {
       console.error(e);
     } finally {

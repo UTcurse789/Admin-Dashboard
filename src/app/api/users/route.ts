@@ -34,14 +34,24 @@ export async function GET() {
       });
 
       users.push(
-        ...response.data.map((user) => ({
-          id: user.id,
-          email: user.emailAddresses[0]?.emailAddress || "No email",
-          firstName: user.firstName,
-          lastName: user.lastName,
-          createdAt: user.createdAt,
-          lastSignInAt: user.lastSignInAt,
-        }))
+        ...response.data.map((user) => {
+          const primaryEmail =
+            user.emailAddresses.find(
+              (emailAddress) =>
+                emailAddress.id === user.primaryEmailAddressId
+            )?.emailAddress ??
+            user.emailAddresses[0]?.emailAddress ??
+            "No email";
+
+          return {
+            id: user.id,
+            email: primaryEmail,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            createdAt: user.createdAt,
+            lastSignInAt: user.lastSignInAt,
+          };
+        })
       );
       totalCount = response.totalCount;
 

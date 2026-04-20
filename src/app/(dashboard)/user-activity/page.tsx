@@ -20,21 +20,24 @@ async function getActivityData() {
   const [dbData, clerkData] = await Promise.all([
     getDbAnalytics().catch(() => null),
     (async () => {
-      const client = await clerkClient();
-      const res = await client.users.getUserList({
-        limit: 500,
-        orderBy: "-created_at",
-      });
-      return res;
+      try {
+        const client = await clerkClient();
+        return await client.users.getUserList({
+          limit: 500,
+          orderBy: "-created_at",
+        });
+      } catch (error) {
+        console.error("Failed to fetch Clerk activity data:", error);
+        return { data: [] };
+      }
     })(),
   ]);
 
   // Merge Clerk sign-in data with DB user data
-  const clerkMap = new Map<string, { lastSignIn: number | null; signInCount: number }>();
+  const clerkMap = new Map<string, { lastSignIn: number | null }>();
   clerkData.data.forEach((u) => {
     clerkMap.set(u.id, {
       lastSignIn: u.lastSignInAt,
-      signInCount: u.externalAccounts?.length || 0,
     });
   });
 

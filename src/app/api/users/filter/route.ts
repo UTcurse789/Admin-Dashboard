@@ -1,11 +1,29 @@
-import { NextResponse } from "next/server";
-import pg from "pg";
+import { NextResponse, type NextRequest } from "next/server";
+import { pool } from "@/lib/db";
 
-export async function GET(req: Request) {
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 1000;
+
+function parseNumberParam(value: string | null, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const searchParams = req.nextUrl.searchParams;
     const key = searchParams.get("key");
     const value = searchParams.get("value");
+    const limit = Math.min(
+      MAX_LIMIT,
+      Math.max(1, parseNumberParam(searchParams.get("limit"), DEFAULT_LIMIT))
+    );
+    const offset = Math.max(0, parseNumberParam(searchParams.get("offset"), 0));
 
     if (!key || !value) {
       return NextResponse.json(
@@ -14,19 +32,13 @@ export async function GET(req: Request) {
       );
     }
 
-    const pool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 5,
-      idleTimeoutMillis: 30000,
-    });
-
     let query = "";
-    let params: string[] = [];
+    let params: Array<string | number> = [];
 
     const baseSelect = `
       SELECT users.id, users.email, users.first_name, users.last_name, users.organization,
-             users.source, users.state, users.salutation, users.created_at, users.job_title
+             users.source, users.data_source, users.state, users.salutation,
+             users.created_at, users.job_title
       FROM users
     `;
 
@@ -37,8 +49,9 @@ export async function GET(req: Request) {
         JOIN industry i ON ui.industry_id = i.id
         WHERE i.name = $1
         ORDER BY users.created_at DESC
+        LIMIT $2 OFFSET $3
       `;
-      params = [value];
+      params = [value, limit, offset];
     } else if (
       ["source", "data_source", "state", "salutation"].includes(key)
     ) {
@@ -47,23 +60,23 @@ export async function GET(req: Request) {
         ${baseSelect}
         WHERE users.${key} = $1
         ORDER BY users.created_at DESC
+        LIMIT $2 OFFSET $3
       `;
-      params = [value];
+      params = [value, limit, offset];
     } else {
       return NextResponse.json({ error: "Invalid filter key." }, { status: 400 });
     }
 
     const { rows } = await pool.query(query, params);
-    
-    // Close the specific pool for this API request
-    await pool.end();
 
-    return NextResponse.json({ users: rows });
+    return NextResponse.json({ users: rows, limit, offset });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("Filter API Error:", error);
+    console.error("Filter API Error:", {
+      error,
+      url: req.url,
+    });
     return NextResponse.json(
-      { error: "Failed to fetch filtered users.", details: message },
+      { error: "Failed to fetch filtered users." },
       { status: 500 }
     );
   }
