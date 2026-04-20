@@ -1,6 +1,31 @@
 const STRAPI_URL = process.env.STRAPI_URL || "http://localhost:1337";
 const STRAPI_ADMIN_TOKEN = process.env.STRAPI_ADMIN_TOKEN || "";
 
+interface StrapiNamedEntity {
+  name?: string | null;
+  attributes?: {
+    name?: string | null;
+  } | null;
+}
+
+interface StrapiSingleRelation<T> {
+  data?: T | null;
+}
+
+interface StrapiManyRelation<T> {
+  data?: T[] | null;
+}
+
+type StrapiNamedRelation =
+  | StrapiNamedEntity
+  | StrapiSingleRelation<StrapiNamedEntity>
+  | null;
+
+type StrapiNamedListRelation =
+  | StrapiNamedEntity[]
+  | StrapiManyRelation<StrapiNamedEntity>
+  | null;
+
 export interface StrapiResponse<T> {
   data: T[];
   meta: {
@@ -15,38 +40,93 @@ export interface StrapiResponse<T> {
 
 export interface StrapiArticle {
   id: number;
-  documentId: string;
-  Title: string;
-  slug: string;
-  publishedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  Date: string;
-  author?: {
-    name: string;
-  } | null;
-  type_of_content?: {
-    name: string;
-  } | null;
-  sectors?: {
-    name: string;
-  }[];
-  tags?: {
-    name: string;
-  }[];
+  documentId?: string;
+  Title?: string;
+  slug?: string;
+  publishedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  Date?: string | null;
+  author?: StrapiNamedRelation;
+  type_of_content?: StrapiNamedRelation;
+  sectors?: StrapiNamedListRelation;
+  tags?: StrapiNamedListRelation;
+  attributes?: Omit<StrapiArticle, "id" | "attributes"> | null;
   [key: string]: unknown;
 }
 
-export interface StrapiAuthor {
+export interface NormalizedStrapiArticle {
   id: number;
-  documentId: string;
-  name: string;
-  slug?: string;
-  designation?: string | null;
-  bio?: Array<any>;
-  createdAt: string;
-  updatedAt: string;
-  publishedAt?: string;
+  title: string;
+  slug: string;
+  publishedAt: string | null;
+  date: string | null;
+  author: string;
+  category: string;
+  sectors: string;
+  status: "published" | "draft";
+}
+
+function readNamedEntityName(entity: StrapiNamedEntity | null | undefined) {
+  return entity?.attributes?.name ?? entity?.name ?? null;
+}
+
+function readRelationName(relation: StrapiNamedRelation | undefined) {
+  if (!relation) {
+    return null;
+  }
+
+  if (typeof relation === "object" && "data" in relation) {
+    return readNamedEntityName(relation.data);
+  }
+
+  return readNamedEntityName(relation as StrapiNamedEntity);
+}
+
+function readRelationNames(relation: StrapiNamedListRelation | undefined) {
+  if (!relation) {
+    return "";
+  }
+
+  const entries = Array.isArray(relation) ? relation : relation.data ?? [];
+
+  return entries
+    .map((entry) => readNamedEntityName(entry))
+    .filter((name): name is string => Boolean(name))
+    .join(", ");
+}
+
+function readString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function readNullableString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+export function normalizeStrapiArticle(
+  article: StrapiArticle
+): NormalizedStrapiArticle {
+  const attrs: Omit<StrapiArticle, "id" | "attributes"> =
+    article.attributes ?? article;
+
+  return {
+    id: article.id,
+    title: readString(attrs.Title, "Untitled"),
+    slug: readString(attrs.slug),
+    publishedAt: readNullableString(attrs.publishedAt),
+    date: readNullableString(attrs.Date),
+    author:
+      readRelationName(attrs.author as StrapiNamedRelation | undefined) ??
+      "Unknown",
+    category:
+      readRelationName(attrs.type_of_content as StrapiNamedRelation | undefined) ??
+      "Uncategorized",
+    sectors: readRelationNames(
+      attrs.sectors as StrapiNamedListRelation | undefined
+    ),
+    status: readNullableString(attrs.publishedAt) ? "published" : "draft",
+  };
 }
 
 /**
@@ -66,13 +146,13 @@ export async function strapiFetch<T>(
       Authorization: `Bearer ${STRAPI_ADMIN_TOKEN}`,
       ...options?.headers,
     },
-    // Ensure the dashboard always fetches fresh data directly from Strapi
-    cache: "no-store",
+    // Revalidate every 60 seconds so the dashboard stays reasonably fresh.
+    next: { revalidate: 60 },
   });
 
   if (!res.ok) {
     throw new Error(
-      `Strapi request failed: ${res.status} ${res.statusText} – ${url}`
+      `Strapi request failed: ${res.status} ${res.statusText} - ${url}`
     );
   }
 

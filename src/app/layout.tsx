@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { CSPostHogProvider } from "@/providers/PostHogProvider";
-import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,9 +16,7 @@ export default function RootLayout({
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <CSPostHogProvider>{children}</CSPostHogProvider>
-        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );
 }
-

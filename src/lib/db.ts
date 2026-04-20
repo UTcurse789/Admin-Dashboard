@@ -1,7 +1,5 @@
 import pg from "pg";
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -183,3 +181,108 @@ export async function getDbAnalytics() {
 }
 
 export type DbAnalytics = Awaited<ReturnType<typeof getDbAnalytics>>;
+
+// ── Funnel-specific analytics ─────────────────────────────────────────
+export interface SourceConversionRow {
+  source: string;
+  total: number;
+  onboarded: number;
+}
+
+export interface MonthlyCoHortRow {
+  month: string; // "YYYY-MM"
+  registered: number;
+  onboarded: number;
+}
+
+export interface UtmPerformanceRow {
+  campaign: string;
+  utmSource: string;
+  total: number;
+  onboarded: number;
+}
+
+export async function getFunnelAnalytics() {
+  const [
+    sourceConvRes,
+    utmRes,
+    cohortRes,
+    onboardingTotalsRes,
+  ] = await Promise.all([
+    // Onboarding rate by source
+    pool.query<{ source: string | null; total: string; onboarded: string }>(`
+      SELECT
+        COALESCE(source, 'Unknown') as source,
+        COUNT(*) as total,
+        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+      FROM users
+      GROUP BY source
+      ORDER BY COUNT(*) DESC
+    `),
+
+    // UTM campaign performance
+    pool.query<{ utm_campaign: string; utm_source: string | null; total: string; onboarded: string }>(`
+      SELECT
+        utm_campaign,
+        COALESCE(utm_source, '') as utm_source,
+        COUNT(*) as total,
+        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+      FROM users
+      WHERE utm_campaign IS NOT NULL AND utm_campaign != ''
+      GROUP BY utm_campaign, utm_source
+      ORDER BY COUNT(*) DESC
+      LIMIT 10
+    `),
+
+    // Monthly cohort: registrations + onboarded
+    pool.query<{ month: Date; registered: string; onboarded: string }>(`
+      SELECT
+        DATE_TRUNC('month', created_at) as month,
+        COUNT(*) as registered,
+        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+      FROM users
+      WHERE created_at >= DATE_TRUNC('month', NOW() - INTERVAL '11 months')
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `),
+
+    // Overall onboarding totals
+    pool.query<{ total: string; onboarded: string; never_signed_in_est: string }>(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded,
+        SUM(CASE WHEN clerk_id IS NULL OR clerk_id = '' THEN 1 ELSE 0 END) as never_signed_in_est
+      FROM users
+    `),
+  ]);
+
+  const totalRow = onboardingTotalsRes.rows[0];
+
+  return {
+    totalRegistered: parseInt(totalRow?.total || "0", 10),
+    totalOnboarded: parseInt(totalRow?.onboarded || "0", 10),
+
+    sourceConversion: sourceConvRes.rows.map((r) => ({
+      source: r.source || "Unknown",
+      total: parseInt(r.total, 10),
+      onboarded: parseInt(r.onboarded, 10),
+    })) as SourceConversionRow[],
+
+    utmPerformance: utmRes.rows.map((r) => ({
+      campaign: r.utm_campaign,
+      utmSource: r.utm_source || "",
+      total: parseInt(r.total, 10),
+      onboarded: parseInt(r.onboarded, 10),
+    })) as UtmPerformanceRow[],
+
+    monthlyCohorts: cohortRes.rows
+      .map((r) => ({
+        month: new Date(r.month).toISOString().slice(0, 7),
+        registered: parseInt(r.registered, 10),
+        onboarded: parseInt(r.onboarded, 10),
+      }))
+      .reverse() as MonthlyCoHortRow[],
+  };
+}
+
+export type FunnelAnalytics = Awaited<ReturnType<typeof getFunnelAnalytics>>;

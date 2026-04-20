@@ -1,8 +1,15 @@
 import { clerkClient } from "@clerk/nextjs/server";
-import { strapiFetch, StrapiResponse, StrapiArticle } from "@/lib/strapi";
+import {
+  normalizeStrapiArticle,
+  strapiFetch,
+  StrapiResponse,
+  StrapiArticle,
+} from "@/lib/strapi";
 import { getDbAnalytics } from "@/lib/db";
-import type { DbAnalytics, CountRow, DailyCount, DbUser } from "@/lib/db";
+import type { CountRow, DailyCount, DbUser } from "@/lib/db";
 import { DashboardClient } from "./DashboardClient";
+
+export const dynamic = "force-dynamic";
 
 export interface DailyDataPoint {
   date: string;
@@ -198,14 +205,11 @@ async function getStrapiData() {
     );
     totalArticles = data.meta.pagination.total;
     allArticles = data.data.map((article) => {
-      const attrs = (article as any).attributes ?? article;
+      const normalized = normalizeStrapiArticle(article);
       return {
-        title: attrs.Title ?? "Untitled",
-        type:
-          attrs.type_of_content?.data?.attributes?.name ??
-          attrs.type_of_content?.name ??
-          "Article",
-        publishedAt: attrs.publishedAt ?? null,
+        title: normalized.title,
+        type: normalized.category,
+        publishedAt: normalized.publishedAt,
       };
     });
   } catch (e) {
