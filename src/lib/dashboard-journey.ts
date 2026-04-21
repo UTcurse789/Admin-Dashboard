@@ -1,4 +1,9 @@
-import { isDbUnavailableError, runDbQuery, type CountRow } from "@/lib/db";
+import {
+  isDbUnavailableError,
+  runDbQuery,
+  withDatabaseClient,
+  type CountRow,
+} from "@/lib/db";
 
 export type JourneyCohortKey = "crm" | "native";
 
@@ -175,15 +180,11 @@ export async function getJourneyDashboardData(
   clerkUsers: JourneyClerkUser[]
 ): Promise<JourneyDashboardData> {
   try {
-    const [
-      invitedResult,
-      completedResult,
-      reminderResult,
-      referralResult,
-      userResult,
-    ] = await Promise.all([
-      runDbQuery<InvitedRow>(
-        `
+    const [invitedResult, completedResult, reminderResult, referralResult, userResult] =
+      await withDatabaseClient("journey analytics", async (client) =>
+        Promise.all([
+          runDbQuery<InvitedRow>(
+            `
           WITH journey_records AS (
             SELECT
               LOWER(email) AS email,
@@ -229,11 +230,12 @@ export async function getJourneyDashboardData(
           FROM deduped
           GROUP BY cohort
         `,
-        [],
-        "journey invited metrics"
-      ),
-      runDbQuery<CompletedRow>(
-        `
+            [],
+            "journey invited metrics",
+            client
+          ),
+          runDbQuery<CompletedRow>(
+            `
           SELECT
             CASE
               WHEN u.crm_lead_id IS NULL OR u.crm_lead_id = '' THEN 'native'
@@ -283,11 +285,12 @@ export async function getJourneyDashboardData(
           LEFT JOIN user_industries ui ON ui.user_id = u.id
           GROUP BY cohort
         `,
-        [],
-        "journey completed metrics"
-      ),
-      runDbQuery<ReminderRow>(
-        `
+            [],
+            "journey completed metrics",
+            client
+          ),
+          runDbQuery<ReminderRow>(
+            `
           WITH reminder_records AS (
             SELECT
               LOWER(email) AS email,
@@ -369,11 +372,12 @@ export async function getJourneyDashboardData(
           FROM deduped
           GROUP BY cohort
         `,
-        [],
-        "journey reminder metrics"
-      ),
-      runDbQuery<ReferralRow>(
-        `
+            [],
+            "journey reminder metrics",
+            client
+          ),
+          runDbQuery<ReferralRow>(
+            `
           SELECT
             COALESCE(
               NULLIF(utm_source, ''),
@@ -389,11 +393,12 @@ export async function getJourneyDashboardData(
           ORDER BY COUNT(*) DESC, 1 ASC
           LIMIT 6
         `,
-        [],
-        "journey referral sources"
-      ),
-      runDbQuery<JourneyUserRow>(
-        `
+            [],
+            "journey referral sources",
+            client
+          ),
+          runDbQuery<JourneyUserRow>(
+            `
           SELECT
             CASE
               WHEN crm_lead_id IS NULL OR crm_lead_id = '' THEN 'native'
@@ -403,10 +408,12 @@ export async function getJourneyDashboardData(
             created_at
           FROM users
         `,
-        [],
-        "journey clerk mapping"
-      ),
-    ]);
+            [],
+            "journey clerk mapping",
+            client
+          ),
+        ])
+      );
 
     const cohortMap = new Map<JourneyCohortKey, JourneyCohortSummary>([
       ["crm", createEmptyCohortSummary("crm")],

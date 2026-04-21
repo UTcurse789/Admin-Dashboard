@@ -11,6 +11,9 @@ import type { CountRow, DailyCount, DbUser } from "@/lib/db";
 import { DashboardClient } from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const preferredRegion = ["bom1", "sin1"];
+export const maxDuration = 30;
 
 export interface DailyDataPoint {
   date: string;
@@ -135,13 +138,11 @@ function getEmptyJourneyData(): Awaited<
 
 async function getDashboardData(): Promise<DashboardData> {
   const clerkUsersPromise = getClerkUsers();
-  const [clerkUsersResult, strapiResult, dbResult, journeyResult] =
-    await Promise.allSettled([
-      clerkUsersPromise,
-      getStrapiData(),
-      getDbAnalytics(),
-      clerkUsersPromise.then((users) => getJourneyDashboardData(users)),
-    ]);
+  const [clerkUsersResult, strapiResult, dbResult] = await Promise.allSettled([
+    clerkUsersPromise,
+    getStrapiData(),
+    getDbAnalytics(),
+  ]);
 
   if (clerkUsersResult.status === "rejected") {
     console.error("Clerk dashboard data failed:", clerkUsersResult.reason);
@@ -155,10 +156,6 @@ async function getDashboardData(): Promise<DashboardData> {
     console.error("DB analytics failed:", dbResult.reason);
   }
 
-  if (journeyResult.status === "rejected") {
-    console.error("Journey analytics failed:", journeyResult.reason);
-  }
-
   const clerkData =
     clerkUsersResult.status === "fulfilled"
       ? buildClerkData(clerkUsersResult.value)
@@ -168,6 +165,18 @@ async function getDashboardData(): Promise<DashboardData> {
       ? strapiResult.value
       : getEmptyStrapiData();
   const dbData = dbResult.status === "fulfilled" ? dbResult.value : null;
+  const databaseUnavailable =
+    dbData?.queryErrors.some((error) => error.startsWith("database:")) ?? false;
+
+  let journeyAnalytics = getEmptyJourneyData();
+
+  if (clerkUsersResult.status === "fulfilled" && !databaseUnavailable) {
+    try {
+      journeyAnalytics = await getJourneyDashboardData(clerkUsersResult.value);
+    } catch (error) {
+      console.error("Journey analytics failed:", error);
+    }
+  }
 
   return {
     ...clerkData,
@@ -183,10 +192,7 @@ async function getDashboardData(): Promise<DashboardData> {
     growthRate: dbData?.growthRate ?? 0,
     growthThisMonth: dbData?.thisMonthCount ?? 0,
     growthLastMonth: dbData?.lastMonthCount ?? 0,
-    journeyAnalytics:
-      journeyResult.status === "fulfilled"
-        ? journeyResult.value
-        : getEmptyJourneyData(),
+    journeyAnalytics,
   };
 }
 
