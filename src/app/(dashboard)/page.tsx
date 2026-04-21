@@ -2,10 +2,11 @@ import { clerkClient } from "@clerk/nextjs/server";
 import {
   normalizeStrapiArticle,
   strapiFetch,
-  StrapiResponse,
   StrapiArticle,
+  StrapiResponse,
 } from "@/lib/strapi";
 import { getDbAnalytics } from "@/lib/db";
+import { getJourneyDashboardData } from "@/lib/dashboard-journey";
 import type { CountRow, DailyCount, DbUser } from "@/lib/db";
 import { DashboardClient } from "./DashboardClient";
 
@@ -37,7 +38,6 @@ export interface ArticleRecord {
 }
 
 export interface DashboardData {
-  // KPI
   totalUsers: number;
   newThisMonth: number;
   newPrevMonth: number;
@@ -46,28 +46,21 @@ export interface DashboardData {
   totalArticles: number;
   articlesPrevMonth: number;
   articlesThisMonth: number;
-  // Growth
   growthRate: number;
   growthThisMonth: number;
   growthLastMonth: number;
-  // Time-series
   dailySignups: DailyDataPoint[];
   dailyContent: DailyDataPoint[];
-  // Breakdowns
   contentByType: ContentTypeBreakdown[];
-  // User journey
   userJourney: {
     total: number;
     activeWithin30d: number;
     activeWithin7d: number;
     neverSignedIn: number;
   };
-  // Weekly activity
   weeklyActivity: { day: string; signups: number; logins: number }[];
-  // Recent lists
   recentUsers: UserRecord[];
   recentArticles: ArticleRecord[];
-  // ── Database analytics ──
   dbTotalUsers: number;
   bySource: CountRow[];
   byDataSource: CountRow[];
@@ -76,6 +69,7 @@ export interface DashboardData {
   byState: CountRow[];
   dailyRegistrations: DailyCount[];
   recentDbUsers: DbUser[];
+  journeyAnalytics: Awaited<ReturnType<typeof getJourneyDashboardData>>;
 }
 
 function toDateKey(ts: number): string {
@@ -120,16 +114,37 @@ function getEmptyStrapiData() {
   };
 }
 
-async function getDashboardData(): Promise<DashboardData> {
-  // ── Run Clerk, Strapi, and DB queries in parallel ────────────
-  const [clerkResult, strapiResult, dbResult] = await Promise.allSettled([
-    getClerkData(),
-    getStrapiData(),
-    getDbAnalytics(),
-  ]);
+function getEmptyJourneyData(): Awaited<
+  ReturnType<typeof getJourneyDashboardData>
+> {
+  return {
+    generatedAt: new Date().toISOString(),
+    completedSignupDefinition:
+      "Verified users who also selected at least one category or industry.",
+    abandonedDefinition:
+      "Users still unverified after repeated reminders or more than 30 days in the reminder funnel.",
+    cohorts: [],
+    pageInsights: {
+      available: false,
+      note: "Journey analytics are unavailable in this environment.",
+      mostVisitedPage: null,
+      dropoffPage: null,
+    },
+  };
+}
 
-  if (clerkResult.status === "rejected") {
-    console.error("Clerk dashboard data failed:", clerkResult.reason);
+async function getDashboardData(): Promise<DashboardData> {
+  const clerkUsersPromise = getClerkUsers();
+  const [clerkUsersResult, strapiResult, dbResult, journeyResult] =
+    await Promise.allSettled([
+      clerkUsersPromise,
+      getStrapiData(),
+      getDbAnalytics(),
+      clerkUsersPromise.then((users) => getJourneyDashboardData(users)),
+    ]);
+
+  if (clerkUsersResult.status === "rejected") {
+    console.error("Clerk dashboard data failed:", clerkUsersResult.reason);
   }
 
   if (strapiResult.status === "rejected") {
@@ -140,9 +155,13 @@ async function getDashboardData(): Promise<DashboardData> {
     console.error("DB analytics failed:", dbResult.reason);
   }
 
+  if (journeyResult.status === "rejected") {
+    console.error("Journey analytics failed:", journeyResult.reason);
+  }
+
   const clerkData =
-    clerkResult.status === "fulfilled"
-      ? clerkResult.value
+    clerkUsersResult.status === "fulfilled"
+      ? buildClerkData(clerkUsersResult.value)
       : getEmptyClerkData();
   const strapiData =
     strapiResult.status === "fulfilled"
@@ -153,7 +172,6 @@ async function getDashboardData(): Promise<DashboardData> {
   return {
     ...clerkData,
     ...strapiData,
-    // DB analytics (with safe fallbacks)
     dbTotalUsers: dbData?.totalDbUsers ?? 0,
     bySource: dbData?.bySource ?? [],
     byDataSource: dbData?.byDataSource ?? [],
@@ -165,15 +183,18 @@ async function getDashboardData(): Promise<DashboardData> {
     growthRate: dbData?.growthRate ?? 0,
     growthThisMonth: dbData?.thisMonthCount ?? 0,
     growthLastMonth: dbData?.lastMonthCount ?? 0,
+    journeyAnalytics:
+      journeyResult.status === "fulfilled"
+        ? journeyResult.value
+        : getEmptyJourneyData(),
   };
 }
 
-async function getClerkData() {
+async function getClerkUsers(): Promise<UserRecord[]> {
   const client = await clerkClient();
   const users: UserRecord[] = [];
   let offset = 0;
   const limit = 500;
-  let totalUsers = 0;
 
   while (true) {
     const response = await client.users.getUserList({
@@ -192,7 +213,6 @@ async function getClerkData() {
         lastSignInAt: user.lastSignInAt,
       }))
     );
-    totalUsers = response.totalCount;
 
     if (response.data.length < limit) {
       break;
@@ -201,6 +221,10 @@ async function getClerkData() {
     offset += limit;
   }
 
+  return users;
+}
+
+function buildClerkData(users: UserRecord[]) {
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -213,7 +237,7 @@ async function getClerkData() {
   const monthStartTs = startOfMonth.getTime();
   const prevMonthStartTs = startOfPrevMonth.getTime();
 
-  totalUsers = users.length || totalUsers;
+  const totalUsers = users.length;
   const newThisMonth = users.filter((u) => u.createdAt >= monthStartTs).length;
   const newPrevMonth = users.filter(
     (u) => u.createdAt >= prevMonthStartTs && u.createdAt < monthStartTs
@@ -228,7 +252,6 @@ async function getClerkData() {
       u.lastSignInAt < sevenDaysAgo
   ).length;
 
-  // Daily signups
   const signupMap = new Map<string, number>();
   users.forEach((u) => {
     const key = toDateKey(u.createdAt);
@@ -238,21 +261,21 @@ async function getClerkData() {
     .map(([date, count]) => ({ date, count }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Weekly activity
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weeklySignups = [0, 0, 0, 0, 0, 0, 0];
   const weeklyLogins = [0, 0, 0, 0, 0, 0, 0];
   users.forEach((u) => {
     weeklySignups[new Date(u.createdAt).getDay()]++;
-    if (u.lastSignInAt) weeklyLogins[new Date(u.lastSignInAt).getDay()]++;
+    if (u.lastSignInAt) {
+      weeklyLogins[new Date(u.lastSignInAt).getDay()]++;
+    }
   });
-  const weeklyActivity = dayNames.map((day, i) => ({
+  const weeklyActivity = dayNames.map((day, index) => ({
     day,
-    signups: weeklySignups[i],
-    logins: weeklyLogins[i],
+    signups: weeklySignups[index],
+    logins: weeklyLogins[index],
   }));
 
-  // User journey funnel
   const activeWithin30d = users.filter(
     (u) => u.lastSignInAt && u.lastSignInAt >= thirtyDaysAgo
   ).length;
@@ -279,6 +302,7 @@ async function getClerkData() {
 async function getStrapiData() {
   let totalArticles = 0;
   const allArticles: ArticleRecord[] = [];
+
   try {
     let page = 1;
     let pageCount = 1;
@@ -302,15 +326,14 @@ async function getStrapiData() {
       );
       page += 1;
     }
-  } catch (e) {
-    console.error("Failed to fetch Strapi data:", e);
+  } catch (error) {
+    console.error("Failed to fetch Strapi data:", error);
   }
 
-  // Daily content
   const contentMap = new Map<string, number>();
-  allArticles.forEach((a) => {
-    if (a.publishedAt) {
-      const key = a.publishedAt.slice(0, 10);
+  allArticles.forEach((article) => {
+    if (article.publishedAt) {
+      const key = article.publishedAt.slice(0, 10);
       contentMap.set(key, (contentMap.get(key) || 0) + 1);
     }
   });
@@ -318,14 +341,14 @@ async function getStrapiData() {
     .map(([date, count]) => ({ date, count }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Content by type
   const typeMap = new Map<string, number>();
-  allArticles.forEach((a) => typeMap.set(a.type, (typeMap.get(a.type) || 0) + 1));
+  allArticles.forEach((article) => {
+    typeMap.set(article.type, (typeMap.get(article.type) || 0) + 1);
+  });
   const contentByType: ContentTypeBreakdown[] = Array.from(typeMap.entries())
     .map(([type, count]) => ({ type, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Month comparisons
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -333,13 +356,13 @@ async function getStrapiData() {
   startOfPrevMonth.setMonth(startOfPrevMonth.getMonth() - 1);
 
   const articlesThisMonth = allArticles.filter(
-    (a) => a.publishedAt && new Date(a.publishedAt) >= startOfMonth
+    (article) => article.publishedAt && new Date(article.publishedAt) >= startOfMonth
   ).length;
   const articlesPrevMonth = allArticles.filter(
-    (a) =>
-      a.publishedAt &&
-      new Date(a.publishedAt) >= startOfPrevMonth &&
-      new Date(a.publishedAt) < startOfMonth
+    (article) =>
+      article.publishedAt &&
+      new Date(article.publishedAt) >= startOfPrevMonth &&
+      new Date(article.publishedAt) < startOfMonth
   ).length;
 
   return {
