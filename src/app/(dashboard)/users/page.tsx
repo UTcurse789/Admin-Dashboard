@@ -5,6 +5,9 @@ import { getDbAnalytics, getDbUsersDirectory } from "@/lib/db";
 import { UsersClient } from "./UsersClient";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const preferredRegion = ["bom1", "sin1"];
+export const maxDuration = 30;
 
 function percentOf(value: number, total: number) {
   if (!total) return "0%";

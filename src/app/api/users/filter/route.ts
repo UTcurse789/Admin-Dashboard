@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isDbUnavailableError, runDbQuery } from "@/lib/db";
 
+export const runtime = "nodejs";
+export const preferredRegion = ["bom1", "sin1"];
+export const maxDuration = 30;
+
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 

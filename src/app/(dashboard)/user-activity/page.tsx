@@ -3,6 +3,9 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { UserActivityClient } from "./UserActivityClient";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const preferredRegion = ["bom1", "sin1"];
+export const maxDuration = 30;
 
 async function getActivityData() {
   const [dbData, clerkData] = await Promise.all([

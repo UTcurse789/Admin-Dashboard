@@ -3,6 +3,9 @@ import { getFunnelAnalytics, getDbAnalytics } from "@/lib/db";
 import { FunnelsClient } from "./FunnelsClient";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const preferredRegion = ["bom1", "sin1"];
+export const maxDuration = 30;
 
 async function getClerkUsers() {
   try {

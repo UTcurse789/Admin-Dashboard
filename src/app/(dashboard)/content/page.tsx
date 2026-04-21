@@ -50,6 +50,9 @@ interface ContentInsights {
 }
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const preferredRegion = ["bom1", "sin1"];
+export const maxDuration = 30;
 
 function formatNumber(value: number) {
   return value.toLocaleString("en-IN");
