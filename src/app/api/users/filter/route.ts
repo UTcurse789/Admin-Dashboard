@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { pool } from "@/lib/db";
+import { isDbUnavailableError, runDbQuery } from "@/lib/db";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
@@ -67,10 +67,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid filter key." }, { status: 400 });
     }
 
-    const { rows } = await pool.query(query, params);
+    const { rows } = await runDbQuery(query, params, "users.filter");
 
     return NextResponse.json({ users: rows, limit, offset });
   } catch (error) {
+    if (isDbUnavailableError(error)) {
+      return NextResponse.json(
+        { error: "Database is temporarily unavailable." },
+        { status: 503 }
+      );
+    }
+
     console.error("Filter API Error:", {
       error,
       url: req.url,

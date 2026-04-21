@@ -1,12 +1,45 @@
-import pg from "pg";
+import pg, { type QueryResultRow } from "pg";
 
-const MAX_DAILY_REG_ROWS = Math.max(
+function parseBoundedInt(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) {
+  const parsed = Number.parseInt(value ?? "", 10);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsed, minimum), maximum);
+}
+
+const MAX_DAILY_REG_ROWS = parseBoundedInt(
+  process.env.MAX_DAILY_REG_ROWS,
+  365,
   1,
-  Math.min(
-    Number.parseInt(process.env.MAX_DAILY_REG_ROWS ?? "365", 10) || 365,
-    5000
-  )
+  5000
 );
+const DB_CONNECTION_TIMEOUT_MS = parseBoundedInt(
+  process.env.DB_CONNECTION_TIMEOUT_MS,
+  5000,
+  1000,
+  30000
+);
+const DB_QUERY_TIMEOUT_MS = parseBoundedInt(
+  process.env.DB_QUERY_TIMEOUT_MS,
+  15000,
+  1000,
+  120000
+);
+const DB_RETRY_COOLDOWN_MS = parseBoundedInt(
+  process.env.DB_RETRY_COOLDOWN_MS,
+  15000,
+  1000,
+  300000
+);
+const databaseUrl = process.env.DATABASE_URL?.trim();
 const shouldUseDatabaseSsl =
   process.env.DATABASE_SSL === "true" ||
   (process.env.NODE_ENV === "production" &&
@@ -14,19 +47,130 @@ const shouldUseDatabaseSsl =
 const allowSelfSignedCerts =
   process.env.ALLOW_SELF_SIGNED_CERTS === "true" &&
   process.env.NODE_ENV !== "production";
+const CONNECTIVITY_ERROR_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+]);
+
+const dbFailureState = {
+  unavailableUntil: 0,
+  reason: null as string | null,
+};
 
 export const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
   ...(shouldUseDatabaseSsl
     ? { ssl: { rejectUnauthorized: !allowSelfSignedCerts } }
     : {}),
   max: 5,
+  connectionTimeoutMillis: DB_CONNECTION_TIMEOUT_MS,
   idleTimeoutMillis: 30000,
+  query_timeout: DB_QUERY_TIMEOUT_MS,
+  keepAlive: true,
 });
 
 pool.on("error", (error) => {
   console.error("Unexpected PostgreSQL pool error:", error);
 });
+
+export class DbUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DbUnavailableError";
+  }
+}
+
+export function isDbUnavailableError(
+  error: unknown
+): error is DbUnavailableError {
+  return error instanceof DbUnavailableError;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function isConnectivityError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    CONNECTIVITY_ERROR_CODES.has(error.code)
+  );
+}
+
+function cacheDbFailure(error: unknown) {
+  dbFailureState.reason = getErrorMessage(error);
+  dbFailureState.unavailableUntil = Date.now() + DB_RETRY_COOLDOWN_MS;
+}
+
+function clearDbFailureState() {
+  dbFailureState.reason = null;
+  dbFailureState.unavailableUntil = 0;
+}
+
+async function ensureDatabaseAvailable(context: string) {
+  if (!databaseUrl) {
+    throw new DbUnavailableError("DATABASE_URL is not configured.");
+  }
+
+  if (Date.now() < dbFailureState.unavailableUntil) {
+    throw new DbUnavailableError(
+      dbFailureState.reason ?? "Database is temporarily unavailable."
+    );
+  }
+
+  let client: pg.PoolClient | null = null;
+
+  try {
+    client = await pool.connect();
+    clearDbFailureState();
+  } catch (error) {
+    cacheDbFailure(error);
+    console.error(`[DB] ${context} unavailable:`, error);
+    throw new DbUnavailableError(getErrorMessage(error));
+  } finally {
+    client?.release();
+  }
+}
+
+async function withDatabaseOperation<T>(
+  context: string,
+  operation: () => Promise<T>
+) {
+  await ensureDatabaseAvailable(context);
+
+  try {
+    const result = await operation();
+    clearDbFailureState();
+    return result;
+  } catch (error) {
+    if (isConnectivityError(error)) {
+      cacheDbFailure(error);
+    }
+
+    throw error;
+  }
+}
+
+export async function runDbQuery<TResult extends QueryResultRow>(
+  queryText: string,
+  values: readonly unknown[] = [],
+  context = "query"
+) {
+  return withDatabaseOperation(context, () =>
+    pool.query<TResult>(queryText, [...values])
+  );
+}
 
 export interface DbUser {
   id: number;
@@ -60,6 +204,61 @@ export interface DailyCount {
   count: number;
 }
 
+export interface DbAnalytics {
+  totalDbUsers: number;
+  bySource: CountRow[];
+  byDataSource: CountRow[];
+  bySalutation: CountRow[];
+  byIndustry: CountRow[];
+  byState: CountRow[];
+  dailyRegistrations: DailyCount[];
+  growthRate: number;
+  thisMonthCount: number;
+  lastMonthCount: number;
+  recentDbUsers: DbUser[];
+  queryErrors: string[];
+}
+
+export async function getDbUsersDirectory(): Promise<DbUser[]> {
+  try {
+    return await withDatabaseOperation("users directory", async () => {
+      const result = await pool.query<DbUser>(
+        `SELECT id, clerk_id, email, first_name, last_name, phone, country, state,
+                job_title, organization, onboarding_completed, created_at,
+                source, data_source, salutation, registration_method,
+                utm_source, utm_medium, utm_campaign
+         FROM users
+         ORDER BY created_at DESC NULLS LAST`
+      );
+
+      return result.rows;
+    });
+  } catch (error) {
+    if (isDbUnavailableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+function buildEmptyDbAnalytics(queryErrors: string[] = []): DbAnalytics {
+  return {
+    totalDbUsers: 0,
+    bySource: [],
+    byDataSource: [],
+    bySalutation: [],
+    byIndustry: [],
+    byState: [],
+    dailyRegistrations: [],
+    growthRate: 0,
+    thisMonthCount: 0,
+    lastMonthCount: 0,
+    recentDbUsers: [],
+    queryErrors,
+  };
+}
+
 function unwrapSettledRows<T>(
   result: PromiseSettledResult<T[]>,
   label: string,
@@ -75,6 +274,10 @@ function unwrapSettledRows<T>(
       ? result.reason.message
       : String(result.reason);
 
+  if (isConnectivityError(result.reason)) {
+    cacheDbFailure(result.reason);
+  }
+
   console.error(`DB analytics query failed (${label}):`, result.reason);
   queryErrors.push(`${label}: ${message}`);
 
@@ -85,7 +288,17 @@ function unwrapSettledRows<T>(
  * Fetch all database analytics in a single call.
  * Each query is independent so we run them in parallel.
  */
-export async function getDbAnalytics() {
+export async function getDbAnalytics(): Promise<DbAnalytics> {
+  try {
+    await ensureDatabaseAvailable("analytics");
+  } catch (error) {
+    if (isDbUnavailableError(error)) {
+      return buildEmptyDbAnalytics([`database: ${error.message}`]);
+    }
+
+    throw error;
+  }
+
   const results = await Promise.allSettled([
     // 1. Total users
     pool
@@ -276,8 +489,6 @@ export async function getDbAnalytics() {
   };
 }
 
-export type DbAnalytics = Awaited<ReturnType<typeof getDbAnalytics>>;
-
 // ── Funnel-specific analytics ─────────────────────────────────────────
 export interface SourceConversionRow {
   source: string;
@@ -298,86 +509,112 @@ export interface UtmPerformanceRow {
   onboarded: number;
 }
 
-export async function getFunnelAnalytics() {
-  const [
-    sourceConvRes,
-    utmRes,
-    cohortRes,
-    onboardingTotalsRes,
-  ] = await Promise.all([
-    // Onboarding rate by source
-    pool.query<{ source: string | null; total: string; onboarded: string }>(`
-      SELECT
-        COALESCE(source, 'Unknown') as source,
-        COUNT(*) as total,
-        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-      FROM users
-      GROUP BY source
-      ORDER BY COUNT(*) DESC
-    `),
+export interface FunnelAnalytics {
+  totalRegistered: number;
+  totalOnboarded: number;
+  sourceConversion: SourceConversionRow[];
+  utmPerformance: UtmPerformanceRow[];
+  monthlyCohorts: MonthlyCoHortRow[];
+}
 
-    // UTM campaign performance
-    pool.query<{ utm_campaign: string; utm_source: string | null; total: string; onboarded: string }>(`
-      SELECT
-        utm_campaign,
-        COALESCE(utm_source, '') as utm_source,
-        COUNT(*) as total,
-        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-      FROM users
-      WHERE utm_campaign IS NOT NULL AND utm_campaign != ''
-      GROUP BY utm_campaign, utm_source
-      ORDER BY COUNT(*) DESC
-      LIMIT 10
-    `),
-
-    // Monthly cohort: registrations + onboarded
-    pool.query<{ month: Date; registered: string; onboarded: string }>(`
-      SELECT
-        DATE_TRUNC('month', created_at) as month,
-        COUNT(*) as registered,
-        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-      FROM users
-      WHERE created_at >= DATE_TRUNC('month', NOW() - INTERVAL '11 months')
-      GROUP BY 1
-      ORDER BY 1 ASC
-    `),
-
-    // Overall onboarding totals
-    pool.query<{ total: string; onboarded: string }>(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-      FROM users
-    `),
-  ]);
-
-  const totalRow = onboardingTotalsRes.rows[0];
-
+function buildEmptyFunnelAnalytics(): FunnelAnalytics {
   return {
-    totalRegistered: parseInt(totalRow?.total || "0", 10),
-    totalOnboarded: parseInt(totalRow?.onboarded || "0", 10),
-
-    sourceConversion: sourceConvRes.rows.map((r) => ({
-      source: r.source || "Unknown",
-      total: parseInt(r.total, 10),
-      onboarded: parseInt(r.onboarded, 10),
-    })) as SourceConversionRow[],
-
-    utmPerformance: utmRes.rows.map((r) => ({
-      campaign: r.utm_campaign,
-      utmSource: r.utm_source || "",
-      total: parseInt(r.total, 10),
-      onboarded: parseInt(r.onboarded, 10),
-    })) as UtmPerformanceRow[],
-
-    monthlyCohorts: cohortRes.rows
-      .map((r) => ({
-        month: new Date(r.month).toISOString().slice(0, 7),
-        registered: parseInt(r.registered, 10),
-        onboarded: parseInt(r.onboarded, 10),
-      }))
-      .reverse() as MonthlyCoHortRow[],
+    totalRegistered: 0,
+    totalOnboarded: 0,
+    sourceConversion: [],
+    utmPerformance: [],
+    monthlyCohorts: [],
   };
 }
 
-export type FunnelAnalytics = Awaited<ReturnType<typeof getFunnelAnalytics>>;
+export async function getFunnelAnalytics(): Promise<FunnelAnalytics> {
+  try {
+    return await withDatabaseOperation("funnel analytics", async () => {
+      const [
+        sourceConvRes,
+        utmRes,
+        cohortRes,
+        onboardingTotalsRes,
+      ] = await Promise.all([
+        // Onboarding rate by source
+        pool.query<{ source: string | null; total: string; onboarded: string }>(`
+          SELECT
+            COALESCE(source, 'Unknown') as source,
+            COUNT(*) as total,
+            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+          FROM users
+          GROUP BY source
+          ORDER BY COUNT(*) DESC
+        `),
+
+        // UTM campaign performance
+        pool.query<{ utm_campaign: string; utm_source: string | null; total: string; onboarded: string }>(`
+          SELECT
+            utm_campaign,
+            COALESCE(utm_source, '') as utm_source,
+            COUNT(*) as total,
+            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+          FROM users
+          WHERE utm_campaign IS NOT NULL AND utm_campaign != ''
+          GROUP BY utm_campaign, utm_source
+          ORDER BY COUNT(*) DESC
+          LIMIT 10
+        `),
+
+        // Monthly cohort: registrations + onboarded
+        pool.query<{ month: Date; registered: string; onboarded: string }>(`
+          SELECT
+            DATE_TRUNC('month', created_at) as month,
+            COUNT(*) as registered,
+            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+          FROM users
+          WHERE created_at >= DATE_TRUNC('month', NOW() - INTERVAL '11 months')
+          GROUP BY 1
+          ORDER BY 1 ASC
+        `),
+
+        // Overall onboarding totals
+        pool.query<{ total: string; onboarded: string }>(`
+          SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+          FROM users
+        `),
+      ]);
+
+      const totalRow = onboardingTotalsRes.rows[0];
+
+      return {
+        totalRegistered: parseInt(totalRow?.total || "0", 10),
+        totalOnboarded: parseInt(totalRow?.onboarded || "0", 10),
+
+        sourceConversion: sourceConvRes.rows.map((r) => ({
+          source: r.source || "Unknown",
+          total: parseInt(r.total, 10),
+          onboarded: parseInt(r.onboarded, 10),
+        })) as SourceConversionRow[],
+
+        utmPerformance: utmRes.rows.map((r) => ({
+          campaign: r.utm_campaign,
+          utmSource: r.utm_source || "",
+          total: parseInt(r.total, 10),
+          onboarded: parseInt(r.onboarded, 10),
+        })) as UtmPerformanceRow[],
+
+        monthlyCohorts: cohortRes.rows
+          .map((r) => ({
+            month: new Date(r.month).toISOString().slice(0, 7),
+            registered: parseInt(r.registered, 10),
+            onboarded: parseInt(r.onboarded, 10),
+          }))
+          .reverse() as MonthlyCoHortRow[],
+      };
+    });
+  } catch (error) {
+    if (isDbUnavailableError(error)) {
+      return buildEmptyFunnelAnalytics();
+    }
+
+    throw error;
+  }
+}
