@@ -23,7 +23,7 @@ const MAX_DAILY_REG_ROWS = parseBoundedInt(
 );
 const DB_CONNECTION_TIMEOUT_MS = parseBoundedInt(
   process.env.DB_CONNECTION_TIMEOUT_MS,
-  15000,
+  8000,
   1000,
   30000
 );

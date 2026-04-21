@@ -1,5 +1,13 @@
 const STRAPI_URL = process.env.STRAPI_URL || "http://localhost:1337";
 const STRAPI_ADMIN_TOKEN = process.env.STRAPI_ADMIN_TOKEN || "";
+const STRAPI_FETCH_TIMEOUT_MS = Number.isFinite(
+  Number.parseInt(process.env.STRAPI_FETCH_TIMEOUT_MS ?? "", 10)
+)
+  ? Math.min(
+      Math.max(Number.parseInt(process.env.STRAPI_FETCH_TIMEOUT_MS ?? "", 10), 1000),
+      30000
+    )
+  : 8000;
 
 interface StrapiNamedEntity {
   name?: string | null;
@@ -146,6 +154,11 @@ export async function strapiFetch<T>(
       Authorization: `Bearer ${STRAPI_ADMIN_TOKEN}`,
       ...options?.headers,
     },
+    signal:
+      options?.signal ??
+      (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+        ? AbortSignal.timeout(STRAPI_FETCH_TIMEOUT_MS)
+        : undefined),
     // Revalidate every 60 seconds so the dashboard stays reasonably fresh.
     next: { revalidate: 60 },
   });

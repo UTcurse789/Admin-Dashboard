@@ -15,6 +15,40 @@ export const runtime = "nodejs";
 export const preferredRegion = ["bom1", "sin1"];
 export const maxDuration = 30;
 
+function parseBoundedInt(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) {
+  const parsed = Number.parseInt(value ?? "", 10);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsed, minimum), maximum);
+}
+
+const DASHBOARD_CLERK_PAGE_SIZE = parseBoundedInt(
+  process.env.DASHBOARD_CLERK_PAGE_SIZE,
+  500,
+  50,
+  500
+);
+const DASHBOARD_MAX_CLERK_PAGES = parseBoundedInt(
+  process.env.DASHBOARD_MAX_CLERK_PAGES,
+  4,
+  1,
+  20
+);
+const DASHBOARD_CLERK_LOOKBACK_DAYS = parseBoundedInt(
+  process.env.DASHBOARD_CLERK_LOOKBACK_DAYS,
+  400,
+  30,
+  3650
+);
+
 export interface DailyDataPoint {
   date: string;
   count: number;
@@ -38,6 +72,11 @@ export interface ArticleRecord {
   title: string;
   type: string;
   publishedAt: string | null;
+}
+
+interface ClerkUsersSnapshot {
+  users: UserRecord[];
+  totalCount: number;
 }
 
 export interface DashboardData {
@@ -172,7 +211,9 @@ async function getDashboardData(): Promise<DashboardData> {
 
   if (clerkUsersResult.status === "fulfilled" && !databaseUnavailable) {
     try {
-      journeyAnalytics = await getJourneyDashboardData(clerkUsersResult.value);
+      journeyAnalytics = await getJourneyDashboardData(
+        clerkUsersResult.value.users
+      );
     } catch (error) {
       console.error("Journey analytics failed:", error);
     }
@@ -196,11 +237,15 @@ async function getDashboardData(): Promise<DashboardData> {
   };
 }
 
-async function getClerkUsers(): Promise<UserRecord[]> {
+async function getClerkUsers(): Promise<ClerkUsersSnapshot> {
   const client = await clerkClient();
   const users: UserRecord[] = [];
   let offset = 0;
-  const limit = 500;
+  const limit = DASHBOARD_CLERK_PAGE_SIZE;
+  let totalCount = 0;
+  let pagesFetched = 0;
+  const lookbackCutoff =
+    Date.now() - DASHBOARD_CLERK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
 
   while (true) {
     const response = await client.users.getUserList({
@@ -208,6 +253,8 @@ async function getClerkUsers(): Promise<UserRecord[]> {
       offset,
       orderBy: "-created_at",
     });
+    totalCount = response.totalCount;
+    pagesFetched += 1;
 
     users.push(
       ...response.data.map((user) => ({
@@ -220,17 +267,29 @@ async function getClerkUsers(): Promise<UserRecord[]> {
       }))
     );
 
-    if (response.data.length < limit) {
+    const oldestFetchedCreatedAt =
+      response.data[response.data.length - 1]?.createdAt ?? null;
+
+    if (
+      response.data.length < limit ||
+      pagesFetched >= DASHBOARD_MAX_CLERK_PAGES ||
+      (oldestFetchedCreatedAt !== null &&
+        oldestFetchedCreatedAt < lookbackCutoff)
+    ) {
       break;
     }
 
     offset += limit;
   }
 
-  return users;
+  return {
+    users,
+    totalCount: Math.max(totalCount, users.length),
+  };
 }
 
-function buildClerkData(users: UserRecord[]) {
+function buildClerkData(snapshot: ClerkUsersSnapshot) {
+  const users = snapshot.users;
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -243,7 +302,7 @@ function buildClerkData(users: UserRecord[]) {
   const monthStartTs = startOfMonth.getTime();
   const prevMonthStartTs = startOfPrevMonth.getTime();
 
-  const totalUsers = users.length;
+  const totalUsers = snapshot.totalCount;
   const newThisMonth = users.filter((u) => u.createdAt >= monthStartTs).length;
   const newPrevMonth = users.filter(
     (u) => u.createdAt >= prevMonthStartTs && u.createdAt < monthStartTs
@@ -315,18 +374,28 @@ async function getStrapiData() {
 
     while (page <= pageCount) {
       const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
-        `/api/contents?populate=*&sort=publishedAt:desc&pagination[page]=${page}&pagination[pageSize]=100`
+        `/api/contents?fields[0]=Title&fields[1]=publishedAt&sort[0]=publishedAt:desc&pagination[page]=${page}&pagination[pageSize]=100&populate[type_of_content][fields][0]=name`
       );
 
       totalArticles = data.meta.pagination.total;
       pageCount = data.meta.pagination.pageCount;
       allArticles.push(
         ...data.data.map((article) => {
-          const normalized = normalizeStrapiArticle(article);
           return {
-            title: normalized.title,
-            type: normalized.category,
-            publishedAt: normalized.publishedAt,
+            title:
+              typeof article.Title === "string"
+                ? article.Title
+                : typeof article.attributes?.Title === "string"
+                ? article.attributes.Title
+                : "Untitled",
+            type:
+              normalizeStrapiArticle(article).category,
+            publishedAt:
+              typeof article.publishedAt === "string"
+                ? article.publishedAt
+                : typeof article.attributes?.publishedAt === "string"
+                ? article.attributes.publishedAt
+                : null,
           };
         })
       );
