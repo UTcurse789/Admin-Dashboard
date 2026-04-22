@@ -1,4 +1,5 @@
 import {
+  getStrapiUnavailableMessage,
   normalizeStrapiArticle,
   strapiFetch,
   StrapiArticle,
@@ -80,6 +81,8 @@ export interface DashboardData {
   journeyAnalytics: Awaited<ReturnType<typeof getJourneyDashboardData>>;
   databaseAvailable: boolean;
   databaseStatusMessage: string | null;
+  contentAvailable: boolean;
+  contentStatusMessage: string | null;
   userDirectorySource: "database" | "clerk";
 }
 
@@ -177,6 +180,10 @@ async function getDashboardData(): Promise<DashboardData> {
     dbResult.status === "fulfilled"
       ? getDatabaseUnavailableMessage(dbResult.value.queryErrors)
       : "Database analytics could not be loaded.";
+  const contentStatusMessage =
+    strapiResult.status === "rejected"
+      ? getStrapiUnavailableMessage(strapiResult.reason)
+      : null;
   const databaseUnavailable = Boolean(databaseStatusMessage);
   const useClerkDirectoryFallback =
     databaseUnavailable &&
@@ -227,6 +234,8 @@ async function getDashboardData(): Promise<DashboardData> {
     journeyAnalytics,
     databaseAvailable: !databaseUnavailable,
     databaseStatusMessage,
+    contentAvailable: !contentStatusMessage,
+    contentStatusMessage,
     userDirectorySource: useClerkDirectoryFallback ? "clerk" : "database",
   };
 }
@@ -310,42 +319,36 @@ function buildClerkData(snapshot: ClerkUsersSnapshot) {
 async function getStrapiData() {
   let totalArticles = 0;
   const allArticles: ArticleRecord[] = [];
+  let page = 1;
+  let pageCount = 1;
 
-  try {
-    let page = 1;
-    let pageCount = 1;
+  while (page <= pageCount) {
+    const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
+      `/api/contents?fields[0]=Title&fields[1]=publishedAt&sort[0]=publishedAt:desc&pagination[page]=${page}&pagination[pageSize]=100&populate[type_of_content][fields][0]=name`
+    );
 
-    while (page <= pageCount) {
-      const data = await strapiFetch<StrapiResponse<StrapiArticle>>(
-        `/api/contents?fields[0]=Title&fields[1]=publishedAt&sort[0]=publishedAt:desc&pagination[page]=${page}&pagination[pageSize]=100&populate[type_of_content][fields][0]=name`
-      );
-
-      totalArticles = data.meta.pagination.total;
-      pageCount = data.meta.pagination.pageCount;
-      allArticles.push(
-        ...data.data.map((article) => {
-          return {
-            title:
-              typeof article.Title === "string"
-                ? article.Title
-                : typeof article.attributes?.Title === "string"
-                ? article.attributes.Title
-                : "Untitled",
-            type:
-              normalizeStrapiArticle(article).category,
-            publishedAt:
-              typeof article.publishedAt === "string"
-                ? article.publishedAt
-                : typeof article.attributes?.publishedAt === "string"
-                ? article.attributes.publishedAt
-                : null,
-          };
-        })
-      );
-      page += 1;
-    }
-  } catch (error) {
-    console.error("Failed to fetch Strapi data:", error);
+    totalArticles = data.meta.pagination.total;
+    pageCount = data.meta.pagination.pageCount;
+    allArticles.push(
+      ...data.data.map((article) => {
+        return {
+          title:
+            typeof article.Title === "string"
+              ? article.Title
+              : typeof article.attributes?.Title === "string"
+              ? article.attributes.Title
+              : "Untitled",
+          type: normalizeStrapiArticle(article).category,
+          publishedAt:
+            typeof article.publishedAt === "string"
+              ? article.publishedAt
+              : typeof article.attributes?.publishedAt === "string"
+              ? article.attributes.publishedAt
+              : null,
+        };
+      })
+    );
+    page += 1;
   }
 
   const contentMap = new Map<string, number>();

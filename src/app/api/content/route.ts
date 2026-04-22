@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
+  getStrapiUnavailableMessage,
   normalizeStrapiArticle,
   strapiFetch,
   StrapiResponse,
@@ -50,7 +51,7 @@ export async function GET() {
   } catch (error) {
     console.error("Error fetching content:", error);
     return NextResponse.json(
-      { error: "Failed to fetch content" },
+      { error: getStrapiUnavailableMessage(error) },
       { status: 500 }
     );
   }
