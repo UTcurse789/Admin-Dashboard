@@ -14,6 +14,7 @@ import {
   mapClerkUsersToDbUsers,
   type ClerkUsersSnapshot,
 } from "@/lib/clerk-users";
+import { getBrevoAnalytics } from "@/lib/brevo";
 import { DashboardClient } from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +80,18 @@ export interface DashboardData {
   dailyRegistrations: DailyCount[];
   recentDbUsers: DbUser[];
   journeyAnalytics: Awaited<ReturnType<typeof getJourneyDashboardData>>;
+  brevoSummary: {
+    available: boolean;
+    statusMessage: string | null;
+    totalContacts: number;
+    contactsLast30Days: number;
+    contactsPrev30Days: number;
+    contactGrowthRate: number;
+    primaryListName: string | null;
+    primaryListCount: number;
+    primaryListShare: number;
+    sendCreditsRemaining: number;
+  };
   databaseAvailable: boolean;
   databaseStatusMessage: string | null;
   contentAvailable: boolean;
@@ -147,12 +160,29 @@ function getEmptyJourneyData(): Awaited<
   };
 }
 
+function getEmptyBrevoSummary(): DashboardData["brevoSummary"] {
+  return {
+    available: false,
+    statusMessage: "Brevo analytics are unavailable in this environment.",
+    totalContacts: 0,
+    contactsLast30Days: 0,
+    contactsPrev30Days: 0,
+    contactGrowthRate: 0,
+    primaryListName: null,
+    primaryListCount: 0,
+    primaryListShare: 0,
+    sendCreditsRemaining: 0,
+  };
+}
+
 async function getDashboardData(): Promise<DashboardData> {
   const clerkUsersPromise = getClerkUsersSnapshot();
-  const [clerkUsersResult, strapiResult, dbResult] = await Promise.allSettled([
+  const [clerkUsersResult, strapiResult, dbResult, brevoResult] =
+    await Promise.allSettled([
     clerkUsersPromise,
     getStrapiData(),
     getDbAnalytics(),
+    getBrevoAnalytics(),
   ]);
 
   if (clerkUsersResult.status === "rejected") {
@@ -167,6 +197,10 @@ async function getDashboardData(): Promise<DashboardData> {
     console.error("DB analytics failed:", dbResult.reason);
   }
 
+  if (brevoResult.status === "rejected") {
+    console.error("Brevo dashboard data failed:", brevoResult.reason);
+  }
+
   const clerkData =
     clerkUsersResult.status === "fulfilled"
       ? buildClerkData(clerkUsersResult.value)
@@ -176,6 +210,7 @@ async function getDashboardData(): Promise<DashboardData> {
       ? strapiResult.value
       : getEmptyStrapiData();
   const dbData = dbResult.status === "fulfilled" ? dbResult.value : null;
+  const brevoData = brevoResult.status === "fulfilled" ? brevoResult.value : null;
   const databaseStatusMessage =
     dbResult.status === "fulfilled"
       ? getDatabaseUnavailableMessage(dbResult.value.queryErrors)
@@ -210,6 +245,21 @@ async function getDashboardData(): Promise<DashboardData> {
     clerkUsersResult.status === "fulfilled"
       ? buildDailyRegistrationsFromClerkUsers(clerkUsersResult.value.users)
       : [];
+  const dominantBrevoList = brevoData?.contacts.listBreakdown[0] ?? null;
+  const brevoSummary = brevoData
+    ? {
+        available: brevoData.available,
+        statusMessage: brevoData.statusMessage,
+        totalContacts: brevoData.metrics.totalContacts,
+        contactsLast30Days: brevoData.metrics.contactsLast30Days,
+        contactsPrev30Days: brevoData.metrics.contactsPrev30Days,
+        contactGrowthRate: brevoData.metrics.contactGrowthRate,
+        primaryListName: dominantBrevoList?.label ?? null,
+        primaryListCount: dominantBrevoList?.count ?? 0,
+        primaryListShare: dominantBrevoList?.share ?? 0,
+        sendCreditsRemaining: brevoData.account.sendCreditsRemaining,
+      }
+    : getEmptyBrevoSummary();
 
   return {
     ...clerkData,
@@ -232,6 +282,7 @@ async function getDashboardData(): Promise<DashboardData> {
     growthThisMonth: dbData?.thisMonthCount ?? 0,
     growthLastMonth: dbData?.lastMonthCount ?? 0,
     journeyAnalytics,
+    brevoSummary,
     databaseAvailable: !databaseUnavailable,
     databaseStatusMessage,
     contentAvailable: !contentStatusMessage,

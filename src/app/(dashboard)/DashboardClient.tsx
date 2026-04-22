@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Users, UserPlus, Activity, FileText, ArrowUpRight, ArrowDownRight,
-  ArrowRight, Download, Filter, TrendingUp, BarChart3, Calendar,
+  Users, UserPlus, Activity, FileText, ArrowRight, Download, Filter,
+  TrendingUp, BarChart3, Calendar, Mail,
   Building2, MapPin, Globe, ChevronDown, PieChart as PieChartIcon,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
@@ -485,14 +485,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const filteredRegistrations = useMemo(() => filterByRange(data.dailyRegistrations, dateRange), [data.dailyRegistrations, dateRange]);
   const filteredContent = useMemo(() => filterByRange(data.dailyContent, dateRange), [data.dailyContent, dateRange]);
 
-  const stats = [
-    { label: "Total Users", value: data.dbTotalUsers || data.totalUsers, icon: Users, accent: "border-l-emerald-500", iconColor: "text-emerald-600", trend: trendPct(data.newThisMonth, data.newPrevMonth), trendUp: data.newThisMonth >= data.newPrevMonth, sub: "vs prev month" },
-    { label: "New This Month", value: data.growthThisMonth || data.newThisMonth, icon: UserPlus, accent: "border-l-blue-500", iconColor: "text-blue-600", trend: trendPct(data.growthThisMonth, data.growthLastMonth), trendUp: data.growthThisMonth >= data.growthLastMonth, sub: "registrations" },
-    { label: "Active (7 Days)", value: data.activeLast7Days, icon: Activity, accent: "border-l-violet-500", iconColor: "text-violet-600", trend: trendPct(data.activeLast7Days, data.activePrev7Days), trendUp: data.activeLast7Days >= data.activePrev7Days, sub: "vs prev 7 days" },
-    { label: "Total Articles", value: data.totalArticles, icon: FileText, accent: "border-l-orange-500", iconColor: "text-orange-600", trend: trendPct(data.articlesThisMonth, data.articlesPrevMonth), trendUp: data.articlesThisMonth >= data.articlesPrevMonth, sub: "published this month" },
-    { label: "Growth Rate", value: `${data.growthRate >= 0 ? "+" : ""}${data.growthRate.toFixed(1)}%`, icon: TrendingUp, accent: "border-l-cyan-500", iconColor: "text-cyan-600", trend: data.growthRate >= 0 ? "Positive growth" : "Declining", trendUp: data.growthRate >= 0, sub: "month-over-month" },
-  ];
-
   // ─── ECharts options ─────────────────────────────────────────────
   const registrationOption = useMemo((): EChartsOption => ({
     tooltip: { trigger: "axis", axisPointer: { type: "cross" } },
@@ -784,6 +776,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
 
   const totalAudience = data.dbTotalUsers || data.totalUsers;
   const safeAudience = Math.max(totalAudience, 1);
+  const signedInAtLeastOnce = Math.max(totalAudience - data.userJourney.neverSignedIn, 0);
+  const signedInOnceRate = percentOf(signedInAtLeastOnce, safeAudience);
+  const brevoAvailable = data.brevoSummary.available;
+  const brevoReachRate = percentOf(data.brevoSummary.totalContacts, safeAudience, 1);
+  const primaryBrevoListShare = `${data.brevoSummary.primaryListShare.toFixed(1)}%`;
+  const growthRateLabel = `${data.growthRate >= 0 ? "+" : ""}${data.growthRate.toFixed(1)}%`;
   const registrationTotalInRange = useMemo(
     () => sumCountSeries(filteredRegistrations),
     [filteredRegistrations]
@@ -809,7 +807,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const topDataSource = data.byDataSource[0];
   const topIndustry = data.byIndustry[0];
   const topState = data.byState[0];
-  const topContentType = data.contentByType[0];
   const monthlyActivationRate = percentOf(
     data.userJourney.activeWithin30d,
     safeAudience
@@ -831,70 +828,184 @@ export function DashboardClient({ data }: { data: DashboardData }) {
     ? "No salutation data is available yet."
     : databaseUnavailableLabel;
 
-  const heroMetrics = [
+  const activePresetLabel =
+    DATE_PRESETS.find((preset) => preset.value === dateRange)?.label ?? "30D";
+
+  const journeyKpis = [
     {
-      label: "Audience base",
+      key: "total-users",
+      label: "Total Users",
       value: totalAudience.toLocaleString("en-IN"),
-      detail: `${data.newThisMonth.toLocaleString("en-IN")} new users this month`,
+      detail: `${data.newThisMonth.toLocaleString("en-IN")} new this month`,
+      icon: Users,
+      cardClass:
+        "border-emerald-400 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.2),transparent_44%),linear-gradient(145deg,#059669_0%,#047857_100%)] text-white shadow-[0_24px_60px_-40px_rgba(5,150,105,0.9)]",
+      labelClass: "text-emerald-50/85",
+      valueClass: "text-white",
+      detailClass: "text-emerald-50/90",
+      iconClass: "border-white/15 bg-white/10 text-white",
     },
     {
-      label: "7-day activity",
-      value: weeklyActivationRate,
-      detail: `${data.activeLast7Days.toLocaleString("en-IN")} active users in the last week`,
+      key: "new-this-month",
+      label: "New This Month",
+      value: data.newThisMonth.toLocaleString("en-IN"),
+      detail: `${trendPct(data.newThisMonth, data.newPrevMonth)} vs ${data.newPrevMonth.toLocaleString("en-IN")} last month`,
+      icon: UserPlus,
+      cardClass: "border-slate-200 bg-white text-slate-900",
+      labelClass: "text-slate-400",
+      valueClass: "text-slate-950",
+      detailClass: "text-slate-500",
+      iconClass: "border-blue-100 bg-blue-50 text-blue-600",
     },
     {
-      label: "Content published",
-      value: data.totalArticles.toLocaleString("en-IN"),
-      detail: `${data.articlesThisMonth.toLocaleString("en-IN")} articles published this month`,
+      key: "prev-month",
+      label: "Prev Month",
+      value: data.newPrevMonth.toLocaleString("en-IN"),
+      detail: "Baseline used for month-on-month growth",
+      icon: Calendar,
+      cardClass: "border-slate-200 bg-white text-slate-900",
+      labelClass: "text-slate-400",
+      valueClass: "text-slate-950",
+      detailClass: "text-slate-500",
+      iconClass: "border-cyan-100 bg-cyan-50 text-cyan-600",
     },
     {
-      label: "Growth rate",
-      value: `${data.growthRate >= 0 ? "+" : ""}${data.growthRate.toFixed(1)}%`,
-      detail: `${data.growthThisMonth.toLocaleString("en-IN")} vs ${data.growthLastMonth.toLocaleString("en-IN")} last month`,
+      key: "active-7-days",
+      label: "Active (7 Days)",
+      value: data.activeLast7Days.toLocaleString("en-IN"),
+      detail: `${weeklyActivationRate} of the registered audience`,
+      icon: Activity,
+      cardClass:
+        "border-blue-400 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_42%),linear-gradient(145deg,#2563eb_0%,#4338ca_100%)] text-white shadow-[0_24px_60px_-40px_rgba(37,99,235,0.95)]",
+      labelClass: "text-blue-50/85",
+      valueClass: "text-white",
+      detailClass: "text-blue-50/90",
+      iconClass: "border-white/15 bg-white/10 text-white",
+    },
+    {
+      key: "growth-rate",
+      label: "Growth Rate",
+      value: growthRateLabel,
+      detail: `${data.growthThisMonth.toLocaleString("en-IN")} vs ${data.growthLastMonth.toLocaleString("en-IN")} registrations`,
+      icon: TrendingUp,
+      cardClass: "border-slate-200 bg-white text-slate-900",
+      labelClass: "text-slate-400",
+      valueClass: data.growthRate >= 0 ? "text-emerald-700" : "text-rose-700",
+      detailClass: "text-slate-500",
+      iconClass:
+        data.growthRate >= 0
+          ? "border-emerald-100 bg-emerald-50 text-emerald-600"
+          : "border-rose-100 bg-rose-50 text-rose-600",
+    },
+    {
+      key: "brevo-contacts",
+      label: "Brevo Contacts",
+      value: brevoAvailable
+        ? data.brevoSummary.totalContacts.toLocaleString("en-IN")
+        : "Unavailable",
+      detail: brevoAvailable
+        ? `${brevoReachRate} of users are visible in Brevo`
+        : data.brevoSummary.statusMessage ?? "Brevo analytics are not connected",
+      icon: Mail,
+      cardClass: "border-violet-200 bg-violet-50/80 text-slate-900",
+      labelClass: "text-violet-700",
+      valueClass: "text-slate-950",
+      detailClass: "text-slate-600",
+      iconClass: "border-violet-100 bg-white text-violet-600",
+    },
+  ];
+
+  const journeyStages = [
+    {
+      key: "registered",
+      label: "Signed Up",
+      value: totalAudience.toLocaleString("en-IN"),
+      badge: "100% registered base",
+      detail: `${data.newThisMonth.toLocaleString("en-IN")} users joined in the current month.`,
+      accentClass: "bg-emerald-500",
+    },
+    {
+      key: "signed-in-once",
+      label: "Signed In Once",
+      value: signedInAtLeastOnce.toLocaleString("en-IN"),
+      badge: `${signedInOnceRate} of signups`,
+      detail: `${data.userJourney.neverSignedIn.toLocaleString("en-IN")} users have not started using the product yet.`,
+      accentClass: "bg-sky-500",
+    },
+    {
+      key: "active-30d",
+      label: "Active 30D",
+      value: data.userJourney.activeWithin30d.toLocaleString("en-IN"),
+      badge: `${monthlyActivationRate} monthly active`,
+      detail: "Users who returned within the last 30 days.",
+      accentClass: "bg-amber-500",
+    },
+    {
+      key: "active-7d",
+      label: "Active 7D",
+      value: data.activeLast7Days.toLocaleString("en-IN"),
+      badge: `${weeklyActivationRate} weekly active`,
+      detail: `${trendPct(data.activeLast7Days, data.activePrev7Days)} versus the previous 7-day window.`,
+      accentClass: "bg-violet-500",
+    },
+    {
+      key: "brevo-audience",
+      label: "Brevo Audience",
+      value: brevoAvailable
+        ? data.brevoSummary.totalContacts.toLocaleString("en-IN")
+        : "Unavailable",
+      badge: brevoAvailable ? `${brevoReachRate} in Brevo` : "Brevo offline",
+      detail: brevoAvailable
+        ? data.brevoSummary.primaryListName
+          ? `${data.brevoSummary.primaryListName} holds ${primaryBrevoListShare} of the live email audience.`
+          : `${data.brevoSummary.contactsLast30Days.toLocaleString("en-IN")} contacts were added in the last 30 days.`
+        : data.brevoSummary.statusMessage ?? "Brevo analytics are not connected.",
+      accentClass: "bg-rose-500",
     },
   ];
 
   const overviewBullets = [
     topSource
-      ? `${topSource.label} is the strongest source, contributing ${percentOf(topSource.count, safeAudience)} of registered users.`
-      : "Source data will surface here once registrations are tagged.",
-    `${monthlyActivationRate} of the audience returned in the last 30 days, and ${weeklyActivationRate} was active in the last 7 days.`,
-    topContentType
-      ? `${topContentType.type} is the leading content format at ${percentOf(topContentType.count, Math.max(data.totalArticles, 1))} of the published library.`
-      : "Content mix insights will appear here when articles are available.",
+      ? `${topSource.label} is still the strongest acquisition source, contributing ${percentOf(topSource.count, safeAudience)} of registered users.`
+      : "Source tagging is still too thin to declare a clear acquisition winner.",
+    `${signedInOnceRate} have signed in at least once, ${monthlyActivationRate} returned within 30 days, and ${weeklyActivationRate} stayed active in the last 7 days.`,
+    brevoAvailable
+      ? `${data.brevoSummary.totalContacts.toLocaleString("en-IN")} contacts are currently reachable in Brevo${data.brevoSummary.primaryListName ? `, with ${data.brevoSummary.primaryListName} carrying ${primaryBrevoListShare} of that audience` : ""}.`
+      : "Brevo reach will appear here once the live account is connected and returning data.",
   ];
 
   const executiveHighlights = [
     {
       label: "Audience momentum",
-      value: `${data.growthRate >= 0 ? "+" : ""}${data.growthRate.toFixed(1)}%`,
-      description: `${data.growthThisMonth.toLocaleString("en-IN")} users registered this month versus ${data.growthLastMonth.toLocaleString("en-IN")} last month.`,
+      value: growthRateLabel,
+      description: `${data.growthThisMonth.toLocaleString("en-IN")} registrations landed this month versus ${data.growthLastMonth.toLocaleString("en-IN")} in the previous month.`,
       accent: "from-emerald-500/15 via-emerald-50 to-white",
       icon: TrendingUp,
     },
     {
-      label: "Acquisition leader",
-      value: topSource?.label ?? "No source data",
-      description: topSource
-        ? `${topSource.count.toLocaleString("en-IN")} users, or ${percentOf(topSource.count, safeAudience)}, came from this source.`
-        : "Tag registrations by source to see which channels drive the highest volume.",
+      label: "Activation health",
+      value: weeklyActivationRate,
+      description: `${data.activeLast7Days.toLocaleString("en-IN")} users were active in the last 7 days, while ${data.userJourney.activeWithin30d.toLocaleString("en-IN")} returned within 30 days.`,
       accent: "from-blue-500/15 via-blue-50 to-white",
-      icon: Globe,
+      icon: Activity,
     },
     {
-      label: "Content signal",
-      value: topContentType?.type ?? "No content",
-      description: topContentType
-        ? `${topContentType.count.toLocaleString("en-IN")} published pieces sit in this category, with ${data.articlesThisMonth.toLocaleString("en-IN")} articles shipped this month.`
-        : "Once articles are available, the dashboard will surface the format mix and publishing velocity.",
-      accent: "from-amber-500/15 via-amber-50 to-white",
-      icon: FileText,
+      label: "Brevo reach",
+      value: brevoAvailable
+        ? data.brevoSummary.totalContacts.toLocaleString("en-IN")
+        : "Unavailable",
+      description: brevoAvailable
+        ? `${data.brevoSummary.contactsLast30Days.toLocaleString("en-IN")} contacts were created in the last 30 days, and ${brevoReachRate} of the registered base is currently visible in Brevo.`
+        : data.brevoSummary.statusMessage ?? "Connect Brevo to surface live email audience coverage.",
+      accent: "from-rose-500/15 via-rose-50 to-white",
+      icon: Mail,
     },
   ];
 
   const audienceActions = [
     { label: "Open users", href: "/users" },
     { label: "Open funnels", href: "/funnels" },
+    { label: "Open Brevo", href: "/brevo" },
     { label: "Open content", href: "/content" },
     { label: "User activity", href: "/user-activity" },
   ];
@@ -911,46 +1022,52 @@ export function DashboardClient({ data }: { data: DashboardData }) {
       href: "/content",
     },
     {
+      title: "Brevo analytics",
+      description: "Inspect live contact growth, list quality, campaign performance, and transactional email health inside Brevo.",
+      href: "/brevo",
+    },
+    {
       title: "Retention analysis",
       description: `Open the deeper activity views to investigate weekly engagement, drop-off, and funnel performance.`,
       href: "/user-activity",
     },
   ];
 
-  const activePresetLabel =
-    DATE_PRESETS.find((preset) => preset.value === dateRange)?.label ?? "30D";
-
   const performanceLenses = [
     {
-      key: "acquisition",
-      label: "Acquisition",
-      title: topSource?.label ?? "No source data",
-      value: `${registrationTotalInRange.toLocaleString("en-IN")} registrations in ${activePresetLabel}`,
-      detail: topSource
-        ? `${topSource.count.toLocaleString("en-IN")} users from the leading source (${percentOf(topSource.count, safeAudience)}).`
-        : "Tag registrations by source to surface the strongest channel.",
-      icon: Globe,
+      key: "signup-momentum",
+      label: "Signup momentum",
+      title: `${data.newThisMonth.toLocaleString("en-IN")} new users this month`,
+      value: `${trendPct(data.newThisMonth, data.newPrevMonth)} vs previous month`,
+      detail: `${registrationTotalInRange.toLocaleString("en-IN")} registrations are visible inside the ${activePresetLabel} range.`,
+      icon: UserPlus,
       accent: "border-emerald-200 bg-emerald-50/75 text-emerald-800",
     },
     {
-      key: "retention",
-      label: "Retention",
-      title: `${monthlyActivationRate} monthly activation`,
-      value: `${weeklyActivationRate} weekly activity`,
-      detail: `${data.userJourney.activeWithin7d.toLocaleString("en-IN")} of ${data.userJourney.activeWithin30d.toLocaleString("en-IN")} monthly-active users returned in 7 days.`,
+      key: "activation",
+      label: "Activation",
+      title: `${weeklyActivationRate} weekly active`,
+      value: `${monthlyActivationRate} monthly active`,
+      detail: `${data.activeLast7Days.toLocaleString("en-IN")} of ${data.userJourney.activeWithin30d.toLocaleString("en-IN")} monthly-active users returned in the last 7 days.`,
       icon: Activity,
       accent: "border-blue-200 bg-blue-50/75 text-blue-800",
     },
     {
-      key: "publishing",
-      label: "Publishing",
-      title: `${contentTotalInRange.toLocaleString("en-IN")} pieces in ${activePresetLabel}`,
-      value: `${averageContentPerDay.toFixed(1)} avg per tracked day`,
-      detail: topContentType
-        ? `${topContentType.type} leads with ${percentOf(topContentType.count, Math.max(data.totalArticles, 1))} of the published library.`
-        : "Publishing mix will appear once content type data is available.",
-      icon: FileText,
-      accent: "border-amber-200 bg-amber-50/75 text-amber-800",
+      key: "brevo-reach",
+      label: "Brevo reach",
+      title: brevoAvailable
+        ? `${data.brevoSummary.totalContacts.toLocaleString("en-IN")} live contacts`
+        : "Brevo unavailable",
+      value: brevoAvailable
+        ? `${data.brevoSummary.contactsLast30Days.toLocaleString("en-IN")} added in 30 days`
+        : "Email audience unavailable",
+      detail: brevoAvailable
+        ? data.brevoSummary.primaryListName
+          ? `${data.brevoSummary.primaryListName} holds ${primaryBrevoListShare} of the Brevo audience.`
+          : `${brevoReachRate} of the registered base is visible in Brevo.`
+        : data.brevoSummary.statusMessage ?? "Connect Brevo to surface live email reach.",
+      icon: Mail,
+      accent: "border-rose-200 bg-rose-50/75 text-rose-800",
     },
   ];
 
@@ -1078,13 +1195,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
 
             <div className="space-y-4">
               <h1 className="max-w-4xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                A clearer picture of acquisition, retention, and publishing performance.
+                Track the full path from signup to activation to Brevo reach.
               </h1>
               <p className="max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">
-                This dashboard is structured to answer the core operating questions at a
-                glance: how the audience is growing, which channels and segments are
-                driving registrations, how many users stay active, and what content is
-                being published across the selected time window.
+                The top layer now reads like an operator journey: who signed up, how
+                growth compares to last month, how many users are still active, and how
+                much of that audience is already reachable in Brevo.
               </p>
             </div>
 
@@ -1180,107 +1296,105 @@ export function DashboardClient({ data }: { data: DashboardData }) {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  Current lens
+                  Journey KPI
                 </p>
                 <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
-                  Dashboard pulse
+                  Signup to Brevo on one screen
                 </h2>
               </div>
-              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                {activePresetLabel} view
+              <Badge
+                variant="outline"
+                className={
+                  brevoAvailable
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 bg-slate-50 text-slate-600"
+                }
+              >
+                {brevoAvailable ? "Brevo live" : "Brevo offline"}
               </Badge>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {heroMetrics.map((metric) => (
-                <div
-                  key={metric.label}
-                  className="rounded-[26px] border border-slate-200 bg-slate-50/85 p-4"
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    {metric.label}
-                  </p>
-                  <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
-                    {metric.value}
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                    {metric.detail}
-                  </p>
-                </div>
-              ))}
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {journeyKpis.map((metric) => {
+                const Icon = metric.icon;
+
+                return (
+                  <div
+                    key={metric.key}
+                    className={`rounded-[26px] border p-4 ${metric.cardClass}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p
+                          className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${metric.labelClass}`}
+                        >
+                          {metric.label}
+                        </p>
+                        <p
+                          className={`mt-3 text-3xl font-semibold tracking-tight ${metric.valueClass}`}
+                        >
+                          {metric.value}
+                        </p>
+                      </div>
+                      <div className={`rounded-2xl border px-3 py-2 ${metric.iconClass}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <p className={`mt-2 text-sm leading-relaxed ${metric.detailClass}`}>
+                      {metric.detail}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="mt-5 rounded-[28px] border border-slate-200 bg-slate-50/80 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Period pulse
-              </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <p className="text-xs font-medium text-slate-500">Registrations in range</p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                    {registrationTotalInRange.toLocaleString("en-IN")}
+              <div className="flex items-center justify-between gap-3">
+                <div
+                  className="space-y-1"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                    Whole journey
+                  </p>
+                  <p className="text-sm leading-relaxed text-slate-500">
+                    Follow users from registration into product activity and current
+                    Brevo reach.
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <p className="text-xs font-medium text-slate-500">Content in range</p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                    {contentTotalInRange.toLocaleString("en-IN")}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <p className="text-xs font-medium text-slate-500">30-day activation</p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                    {monthlyActivationRate}
-                  </p>
-                </div>
+                <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">
+                  {activePresetLabel} view
+                </Badge>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                {journeyStages.map((stage) => (
+                  <div
+                    key={stage.key}
+                    className="rounded-[24px] border border-white bg-white px-4 py-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {stage.label}
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                          {stage.value}
+                        </p>
+                      </div>
+                      <span className={`mt-1 inline-flex h-3 w-3 rounded-full ${stage.accentClass}`} />
+                    </div>
+                    <Badge variant="outline" className="mt-3 border-slate-200 bg-slate-50 text-slate-700">
+                      {stage.badge}
+                    </Badge>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-500">
+                      {stage.detail}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card
-              key={stat.label}
-              className={`border border-slate-200 border-l-4 ${stat.accent} bg-white shadow-sm transition-shadow hover:shadow-md`}
-            >
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  {stat.label}
-                </CardTitle>
-                <div className="rounded-2xl bg-slate-50 p-2">
-                  <Icon className={`h-4 w-4 ${stat.iconColor}`} />
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-3xl font-semibold tracking-tight text-slate-950">
-                  {typeof stat.value === "number"
-                    ? stat.value.toLocaleString("en-IN")
-                    : stat.value}
-                </p>
-                <div className="mt-3 flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${stat.trendUp
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-rose-50 text-rose-700"
-                      }`}
-                  >
-                    {stat.trendUp ? (
-                      <ArrowUpRight className="h-3 w-3" />
-                    ) : (
-                      <ArrowDownRight className="h-3 w-3" />
-                    )}
-                    {stat.trend}
-                  </span>
-                  <span className="text-xs text-slate-500">{stat.sub}</span>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
       </section>
 
       <section className="space-y-5">
