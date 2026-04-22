@@ -1186,8 +1186,8 @@ export function DashboardClient({ data }: { data: DashboardData }) {
       ) : null}
 
       <section className="overflow-hidden rounded-[36px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-sm sm:p-8">
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,420px)]">
-          <div className="space-y-6">
+        <div className="space-y-8">
+          <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-700">
               <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               Executive overview
@@ -1203,97 +1203,10 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 much of that audience is already reachable in Brevo.
               </p>
             </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              {performanceLenses.map((lens) => {
-                const Icon = lens.icon;
-                return (
-                  <div
-                    key={lens.key}
-                    className="rounded-[26px] border border-white/70 bg-white/85 p-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.35)] backdrop-blur"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                          {lens.label}
-                        </p>
-                        <p className="mt-3 text-lg font-semibold tracking-tight text-slate-950">
-                          {lens.title}
-                        </p>
-                      </div>
-                      <div className={`rounded-2xl border px-3 py-2 ${lens.accent}`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                    </div>
-                    <p className="mt-3 text-sm font-medium text-slate-700">{lens.value}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{lens.detail}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {DATE_PRESETS.map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  onClick={() => setDateRange(preset.value)}
-                  className={`rounded-full border px-4 py-2 text-xs font-semibold tracking-[0.18em] transition-all ${dateRange === preset.value
-                      ? "border-emerald-500 bg-emerald-500 text-white shadow-sm"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
-                    }`}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              {overviewBullets.map((bullet, index) => (
-                <div
-                  key={bullet}
-                  className="rounded-[28px] border border-white/70 bg-white/85 p-5 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.35)] backdrop-blur"
-                >
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-xs font-semibold tracking-[0.16em] text-white shadow-sm">
-                        0{index + 1}
-                      </div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                        Key takeaway
-                      </p>
-                    </div>
-                    <p className="pr-2 text-base leading-8 text-slate-600">{bullet}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              {audienceActions.map((action) => (
-                <Link
-                  key={action.href}
-                  href={action.href}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-                >
-                  {action.label}
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full border-slate-200 bg-white px-4 text-slate-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-                onClick={() => exportCSV(data)}
-              >
-                <Download className="mr-2 h-3.5 w-3.5" />
-                Export snapshot
-              </Button>
-            </div>
           </div>
 
-          <div className="rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.4)] backdrop-blur">
-            <div className="flex items-center justify-between gap-3">
+          <div className="rounded-[32px] border border-white/70 bg-white/80 p-6 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.4)] backdrop-blur">
+            <div className="flex items-center justify-between gap-3 mb-6">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                   Journey KPI
@@ -1314,7 +1227,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
               </Badge>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {journeyKpis.map((metric) => {
                 const Icon = metric.icon;
 
@@ -1324,23 +1237,23 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                     className={`rounded-[26px] border p-4 ${metric.cardClass}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <p
-                          className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${metric.labelClass}`}
+                          className={`text-[11px] font-semibold uppercase tracking-[0.18em] truncate ${metric.labelClass}`}
                         >
                           {metric.label}
                         </p>
                         <p
-                          className={`mt-3 text-3xl font-semibold tracking-tight ${metric.valueClass}`}
+                          className={`mt-3 text-2xl font-semibold tracking-tight ${metric.valueClass}`}
                         >
                           {metric.value}
                         </p>
                       </div>
-                      <div className={`rounded-2xl border px-3 py-2 ${metric.iconClass}`}>
+                      <div className={`rounded-2xl border px-2.5 py-1.5 shrink-0 ${metric.iconClass}`}>
                         <Icon className="h-4 w-4" />
                       </div>
                     </div>
-                    <p className={`mt-2 text-sm leading-relaxed ${metric.detailClass}`}>
+                    <p className={`mt-2 text-xs leading-relaxed opacity-90 ${metric.detailClass}`}>
                       {metric.detail}
                     </p>
                   </div>
@@ -1348,11 +1261,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
               })}
             </div>
 
-            <div className="mt-5 rounded-[28px] border border-slate-200 bg-slate-50/80 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div
-                  className="space-y-1"
-                >
+            <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+              <div className="flex items-center justify-between gap-3 mb-5">
+                <div className="space-y-1">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                     Whole journey
                   </p>
@@ -1366,32 +1277,132 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 </Badge>
               </div>
 
-              <div className="mt-4 grid gap-3">
-                {journeyStages.map((stage) => (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                {journeyStages.map((stage, idx) => (
                   <div
                     key={stage.key}
-                    className="rounded-[24px] border border-white bg-white px-4 py-4 shadow-sm"
+                    className="relative group"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          {stage.label}
-                        </p>
-                        <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                          {stage.value}
-                        </p>
+                    <div className="h-full rounded-[24px] border border-white bg-white px-5 py-5 shadow-sm transition-all hover:shadow-md hover:border-slate-200">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            {stage.label}
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                            {stage.value}
+                          </p>
+                        </div>
+                        <span className={`mt-1 inline-flex h-3 w-3 rounded-full ${stage.accentClass}`} />
                       </div>
-                      <span className={`mt-1 inline-flex h-3 w-3 rounded-full ${stage.accentClass}`} />
+                      <Badge variant="outline" className="mt-4 border-slate-200 bg-slate-50 text-slate-700">
+                        {stage.badge}
+                      </Badge>
+                      <p className="mt-4 text-xs leading-relaxed text-slate-500">
+                        {stage.detail}
+                      </p>
                     </div>
-                    <Badge variant="outline" className="mt-3 border-slate-200 bg-slate-50 text-slate-700">
-                      {stage.badge}
-                    </Badge>
-                    <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                      {stage.detail}
-                    </p>
+                    {idx < journeyStages.length - 1 && (
+                      <div className="absolute top-1/2 -right-2.5 -translate-y-1/2 z-10 hidden xl:flex items-center justify-center">
+                        <div className="h-8 w-8 rounded-full bg-white border border-slate-100 shadow-sm flex items-center justify-center text-slate-300">
+                          <ArrowRight className="h-4 w-4" />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              {performanceLenses.map((lens) => {
+                const Icon = lens.icon;
+                return (
+                  <div
+                    key={lens.key}
+                    className="rounded-[26px] border border-white/70 bg-white/85 p-5 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.35)] backdrop-blur"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                          {lens.label}
+                        </p>
+                        <p className="mt-3 text-xl font-semibold tracking-tight text-slate-950">
+                          {lens.title}
+                        </p>
+                      </div>
+                      <div className={`rounded-2xl border px-3 py-2 ${lens.accent}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <p className="mt-3 text-base font-medium text-slate-700">{lens.value}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-500">{lens.detail}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-6">
+              <div className="flex flex-wrap gap-2">
+                {DATE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() => setDateRange(preset.value)}
+                    className={`rounded-full border px-4 py-2 text-xs font-semibold tracking-[0.18em] transition-all ${dateRange === preset.value
+                        ? "border-emerald-500 bg-emerald-500 text-white shadow-sm"
+                        : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
+                      }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {audienceActions.map((action) => (
+                  <Link
+                    key={action.href}
+                    href={action.href}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                  >
+                    {action.label}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                  onClick={() => exportCSV(data)}
+                >
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Export snapshot
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {overviewBullets.map((bullet, index) => (
+                <div
+                  key={bullet}
+                  className="rounded-[28px] border border-white/70 bg-white/85 p-6 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.35)] backdrop-blur"
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-xs font-semibold tracking-[0.16em] text-white shadow-sm">
+                        0{index + 1}
+                      </div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                        Key takeaway
+                      </p>
+                    </div>
+                    <p className="pr-2 text-base leading-relaxed text-slate-600">{bullet}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
