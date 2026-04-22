@@ -15,6 +15,8 @@ function parseBoundedInt(
   return Math.min(Math.max(parsed, minimum), maximum);
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const MAX_DAILY_REG_ROWS = parseBoundedInt(
   process.env.MAX_DAILY_REG_ROWS,
   365,
@@ -23,32 +25,32 @@ const MAX_DAILY_REG_ROWS = parseBoundedInt(
 );
 const DB_CONNECTION_TIMEOUT_MS = parseBoundedInt(
   process.env.DB_CONNECTION_TIMEOUT_MS,
-  8000,
-  1000,
+  isProduction ? 8000 : 1500,
+  250,
   30000
 );
 const DB_QUERY_TIMEOUT_MS = parseBoundedInt(
   process.env.DB_QUERY_TIMEOUT_MS,
-  15000,
-  1000,
+  isProduction ? 15000 : 8000,
+  500,
   120000
 );
 const DB_POOL_MAX = parseBoundedInt(process.env.DB_POOL_MAX, 3, 1, 20);
 const DB_CONNECT_ATTEMPTS = parseBoundedInt(
   process.env.DB_CONNECT_ATTEMPTS,
-  2,
+  isProduction ? 2 : 1,
   1,
   5
 );
 const DB_CONNECT_RETRY_DELAY_MS = parseBoundedInt(
   process.env.DB_CONNECT_RETRY_DELAY_MS,
-  400,
+  isProduction ? 400 : 0,
   0,
   5000
 );
 const DB_RETRY_COOLDOWN_MS = parseBoundedInt(
   process.env.DB_RETRY_COOLDOWN_MS,
-  15000,
+  isProduction ? 15000 : 60000,
   1000,
   300000
 );
@@ -72,6 +74,7 @@ const CONNECTIVITY_ERROR_CODES = new Set([
 const dbFailureState = {
   unavailableUntil: 0,
   reason: null as string | null,
+  lastLoggedSignature: null as string | null,
 };
 
 export const pool = new pg.Pool({
@@ -149,6 +152,21 @@ function cacheDbFailure(error: unknown) {
 function clearDbFailureState() {
   dbFailureState.reason = null;
   dbFailureState.unavailableUntil = 0;
+  dbFailureState.lastLoggedSignature = null;
+}
+
+function logDatabaseUnavailable(context: string, error: unknown) {
+  const signature = `${context}:${getErrorMessage(error)}`;
+
+  if (
+    dbFailureState.lastLoggedSignature === signature &&
+    Date.now() < dbFailureState.unavailableUntil
+  ) {
+    return;
+  }
+
+  dbFailureState.lastLoggedSignature = signature;
+  console.error(`[DB] ${context} unavailable:`, error);
 }
 
 async function ensureDatabaseAvailable(context: string) {
@@ -191,7 +209,7 @@ async function ensureDatabaseAvailable(context: string) {
     throw lastError;
   } catch (error) {
     cacheDbFailure(error);
-    console.error(`[DB] ${context} unavailable:`, error);
+    logDatabaseUnavailable(context, error);
     throw new DbUnavailableError(getErrorMessage(error));
   }
 }
@@ -234,7 +252,7 @@ export async function runDbQuery<TResult extends QueryResultRow>(
 }
 
 export interface DbUser {
-  id: number;
+  id: number | string;
   clerk_id: string;
   email: string;
   first_name: string | null;
@@ -278,6 +296,16 @@ export interface DbAnalytics {
   lastMonthCount: number;
   recentDbUsers: DbUser[];
   queryErrors: string[];
+}
+
+export function getDatabaseUnavailableMessage(queryErrors: string[]) {
+  const databaseError = queryErrors.find((error) =>
+    error.startsWith("database:")
+  );
+
+  return databaseError
+    ? databaseError.replace(/^database:\s*/, "").trim()
+    : null;
 }
 
 export async function getDbUsersDirectory(): Promise<DbUser[]> {

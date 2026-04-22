@@ -420,6 +420,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [isDialogLoading, setIsDialogLoading] = useState(false);
   const [dialogPage, setDialogPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
+  const usingClerkFallback = data.userDirectorySource === "clerk";
 
   // Load India GeoJSON from /public/india-states.json and register with ECharts
   useEffect(() => {
@@ -1003,6 +1004,29 @@ export function DashboardClient({ data }: { data: DashboardData }) {
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-8 pb-8">
+      {!data.databaseAvailable ? (
+        <div className="rounded-[28px] border border-amber-200 bg-amber-50/80 p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-amber-100 p-2 text-amber-700">
+              <Activity className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-950">
+                PostgreSQL is unavailable, so database-backed user charts are limited right now.
+              </p>
+              <p className="text-sm leading-6 text-amber-900">
+                {usingClerkFallback
+                  ? "Recent users and registration trend are currently falling back to Clerk. Source, state, industry, and other profile enrichment charts will repopulate when the database reconnects."
+                  : "The dashboard could not reach the database for enriched user analytics."}
+                {data.databaseStatusMessage
+                  ? ` Last connection error: ${data.databaseStatusMessage}.`
+                  : ""}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="overflow-hidden rounded-[36px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-sm sm:p-8">
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,420px)]">
           <div className="space-y-6">
@@ -1953,7 +1977,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                   Recent users
                 </CardTitle>
                 <p className="mt-2 text-sm text-slate-500">
-                  The newest registrations available in the database snapshot.
+                  {usingClerkFallback
+                    ? "The newest registrations available from Clerk while the database reconnects."
+                    : "The newest registrations available in the database snapshot."}
                 </p>
               </div>
               <Link
@@ -2027,7 +2053,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                         colSpan={4}
                         className="py-10 text-center text-sm text-slate-500"
                       >
-                        No recent users available.
+                        No recent users are available from the current source.
                       </TableCell>
                     </TableRow>
                   )}

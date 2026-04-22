@@ -34,6 +34,8 @@ interface UsersClientProps {
   users: DbUser[];
   totalCount: number;
   dailyRegistrations: DailyCount[];
+  directorySource: "database" | "clerk";
+  databaseStatusMessage: string | null;
 }
 
 interface ForecastPoint {
@@ -310,7 +312,13 @@ function getForecastOption(points: ForecastPoint[]): EChartsOption {
   };
 }
 
-function UsersTable({ users }: { users: DbUser[] }) {
+function UsersTable({
+  users,
+  usingClerkFallback,
+}: {
+  users: DbUser[];
+  usingClerkFallback: boolean;
+}) {
   if (users.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -408,7 +416,13 @@ function UsersTable({ users }: { users: DbUser[] }) {
                         : "rounded-full border-amber-200 bg-amber-50 text-[11px] text-amber-700"
                     }
                   >
-                    {user.onboarding_completed ? "Onboarded" : "Pending"}
+                    {usingClerkFallback
+                      ? user.onboarding_completed
+                        ? "Signed in"
+                        : "No sign-in"
+                      : user.onboarding_completed
+                      ? "Onboarded"
+                      : "Pending"}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -444,6 +458,8 @@ export function UsersClient({
   users,
   totalCount,
   dailyRegistrations,
+  directorySource,
+  databaseStatusMessage,
 }: UsersClientProps) {
   const [statusTab, setStatusTab] = useState<"all" | "onboarded" | "pending">(
     "all"
@@ -454,6 +470,7 @@ export function UsersClient({
   const [profileFilter, setProfileFilter] = useState("all");
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
+  const usingClerkFallback = directorySource === "clerk";
 
   const sourceOptions = useMemo(() => {
     return Array.from(
@@ -697,6 +714,29 @@ export function UsersClient({
         </div>
       </div>
 
+      {usingClerkFallback ? (
+        <Card className="border-amber-200 bg-amber-50/70">
+          <CardContent className="flex items-start gap-3 p-5">
+            <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-950">
+                Clerk fallback is active for the user directory.
+              </p>
+              <p className="text-sm leading-6 text-amber-900">
+                Names, email addresses, join dates, and sign-in presence are available.
+                Company, state, source, and profile enrichment fields will return after the
+                database reconnects.
+                {databaseStatusMessage
+                  ? ` Last database connection error: ${databaseStatusMessage}.`
+                  : ""}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Tabs
         value={statusTab}
         onValueChange={(value) => {
@@ -713,14 +753,14 @@ export function UsersClient({
                   All ({formatNumber(users.length)})
                 </TabsTrigger>
                 <TabsTrigger value="onboarded">
-                  Onboarded (
+                  {usingClerkFallback ? "Signed in" : "Onboarded"} (
                   {formatNumber(
                     users.filter((user) => user.onboarding_completed).length
                   )}
                   )
                 </TabsTrigger>
                 <TabsTrigger value="pending">
-                  Pending (
+                  {usingClerkFallback ? "No sign-in" : "Pending"} (
                   {formatNumber(
                     users.filter((user) => !user.onboarding_completed).length
                   )}
@@ -728,9 +768,9 @@ export function UsersClient({
                 </TabsTrigger>
               </TabsList>
               <p className="text-sm text-slate-500">
-                Search by name, email, organization, title, source, or state.
-                Filters and pagination run against the live database-backed user
-                directory.
+                {usingClerkFallback
+                  ? "Search by name, email, and activity while the directory is running on Clerk fallback data."
+                  : "Search by name, email, organization, title, source, or state. Filters and pagination run against the live database-backed user directory."}
               </p>
             </div>
 
@@ -754,7 +794,8 @@ export function UsersClient({
                   setSourceFilter(event.target.value);
                   resetPagination();
                 }}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500"
+                disabled={usingClerkFallback}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <option value="all">All sources</option>
                 {sourceOptions.map((source) => (
@@ -770,7 +811,8 @@ export function UsersClient({
                   setStateFilter(event.target.value);
                   resetPagination();
                 }}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500"
+                disabled={usingClerkFallback}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <option value="all">All states</option>
                 {stateOptions.map((state) => (
@@ -786,7 +828,8 @@ export function UsersClient({
                   setProfileFilter(event.target.value);
                   resetPagination();
                 }}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500"
+                disabled={usingClerkFallback}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <option value="all">All profiles</option>
                 <option value="complete">Complete</option>
@@ -808,13 +851,22 @@ export function UsersClient({
 
           <div className="rounded-xl border bg-white">
             <TabsContent value="all" className="mt-0">
-              <UsersTable users={paginatedUsers} />
+              <UsersTable
+                users={paginatedUsers}
+                usingClerkFallback={usingClerkFallback}
+              />
             </TabsContent>
             <TabsContent value="onboarded" className="mt-0">
-              <UsersTable users={paginatedUsers} />
+              <UsersTable
+                users={paginatedUsers}
+                usingClerkFallback={usingClerkFallback}
+              />
             </TabsContent>
             <TabsContent value="pending" className="mt-0">
-              <UsersTable users={paginatedUsers} />
+              <UsersTable
+                users={paginatedUsers}
+                usingClerkFallback={usingClerkFallback}
+              />
             </TabsContent>
 
             <div className="flex flex-col gap-3 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-between">

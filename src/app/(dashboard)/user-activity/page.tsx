@@ -1,5 +1,9 @@
-import { getDbAnalytics } from "@/lib/db";
-import { clerkClient } from "@clerk/nextjs/server";
+import { getDatabaseUnavailableMessage, getDbAnalytics } from "@/lib/db";
+import {
+  buildDailyRegistrationsFromClerkUsers,
+  getClerkUsersSnapshot,
+  mapClerkUsersToDbUsers,
+} from "@/lib/clerk-users";
 import { UserActivityClient } from "./UserActivityClient";
 
 export const dynamic = "force-dynamic";
@@ -10,42 +14,47 @@ export const maxDuration = 30;
 async function getActivityData() {
   const [dbData, clerkData] = await Promise.all([
     getDbAnalytics().catch(() => null),
-    (async () => {
-      try {
-        const client = await clerkClient();
-        return await client.users.getUserList({
-          limit: 500,
-          orderBy: "-created_at",
-        });
-      } catch (error) {
-        console.error("Failed to fetch Clerk activity data:", error);
-        return { data: [] };
-      }
-    })(),
+    getClerkUsersSnapshot().catch((error) => {
+      console.error("Failed to fetch Clerk activity data:", error);
+      return { users: [], totalCount: 0 };
+    }),
   ]);
+  const databaseStatusMessage = dbData
+    ? getDatabaseUnavailableMessage(dbData.queryErrors)
+    : "Database analytics could not be loaded.";
+  const usingClerkFallback =
+    Boolean(databaseStatusMessage) && clerkData.users.length > 0;
 
   // Merge Clerk sign-in data with DB user data
   const clerkMap = new Map<string, { lastSignIn: number | null }>();
-  clerkData.data.forEach((u) => {
+  clerkData.users.forEach((u) => {
     clerkMap.set(u.id, {
       lastSignIn: u.lastSignInAt,
     });
   });
 
   return {
-    dbUsers: dbData?.recentDbUsers ?? [],
-    totalDbUsers: dbData?.totalDbUsers ?? 0,
+    dbUsers: usingClerkFallback
+      ? mapClerkUsersToDbUsers(clerkData.users)
+      : dbData?.recentDbUsers ?? [],
+    totalDbUsers: usingClerkFallback
+      ? clerkData.totalCount
+      : dbData?.totalDbUsers ?? 0,
     bySource: dbData?.bySource ?? [],
     byDataSource: dbData?.byDataSource ?? [],
     byIndustry: dbData?.byIndustry ?? [],
     byState: dbData?.byState ?? [],
     bySalutation: dbData?.bySalutation ?? [],
-    dailyRegistrations: dbData?.dailyRegistrations ?? [],
+    dailyRegistrations: usingClerkFallback
+      ? buildDailyRegistrationsFromClerkUsers(clerkData.users)
+      : dbData?.dailyRegistrations ?? [],
     clerkMap,
     growthRate: dbData?.growthRate ?? 0,
     thisMonthCount: dbData?.thisMonthCount ?? 0,
     lastMonthCount: dbData?.lastMonthCount ?? 0,
-    queryErrors: dbData?.queryErrors ?? [],
+    queryErrors:
+      dbData?.queryErrors ??
+      (databaseStatusMessage ? [`database: ${databaseStatusMessage}`] : []),
   };
 }
 
