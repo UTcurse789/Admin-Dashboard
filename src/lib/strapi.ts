@@ -1,5 +1,7 @@
-const STRAPI_URL = process.env.STRAPI_URL || "http://localhost:1337";
-const STRAPI_ADMIN_TOKEN = process.env.STRAPI_ADMIN_TOKEN || "";
+const isProduction = process.env.NODE_ENV === "production";
+const STRAPI_URL =
+  process.env.STRAPI_URL?.trim() || (isProduction ? "" : "http://localhost:1337");
+const STRAPI_ADMIN_TOKEN = process.env.STRAPI_ADMIN_TOKEN?.trim() || "";
 const STRAPI_FETCH_TIMEOUT_MS = Number.isFinite(
   Number.parseInt(process.env.STRAPI_FETCH_TIMEOUT_MS ?? "", 10)
 )
@@ -75,6 +77,43 @@ export interface NormalizedStrapiArticle {
   status: "published" | "draft";
 }
 
+export class StrapiUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StrapiUnavailableError";
+  }
+}
+
+export function isStrapiUnavailableError(
+  error: unknown
+): error is StrapiUnavailableError {
+  return error instanceof StrapiUnavailableError;
+}
+
+export function getStrapiConfigurationMessage() {
+  if (!STRAPI_URL) {
+    return "STRAPI_URL is not configured for this deployment.";
+  }
+
+  if (!STRAPI_ADMIN_TOKEN) {
+    return "STRAPI_ADMIN_TOKEN is not configured for this deployment.";
+  }
+
+  return null;
+}
+
+export function getStrapiUnavailableMessage(error: unknown) {
+  if (isStrapiUnavailableError(error)) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "The CMS could not be reached.";
+}
+
 function readNamedEntityName(entity: StrapiNamedEntity | null | undefined) {
   return entity?.attributes?.name ?? entity?.name ?? null;
 }
@@ -145,27 +184,46 @@ export async function strapiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
+  const configurationMessage = getStrapiConfigurationMessage();
+
+  if (configurationMessage) {
+    throw new StrapiUnavailableError(configurationMessage);
+  }
+
   const url = `${STRAPI_URL}${path}`;
 
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${STRAPI_ADMIN_TOKEN}`,
-      ...options?.headers,
-    },
-    signal:
-      options?.signal ??
-      (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
-        ? AbortSignal.timeout(STRAPI_FETCH_TIMEOUT_MS)
-        : undefined),
-    // Revalidate every 60 seconds so the dashboard stays reasonably fresh.
-    next: { revalidate: 60 },
-  });
+  let res: Response;
+
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${STRAPI_ADMIN_TOKEN}`,
+        ...options?.headers,
+      },
+      signal:
+        options?.signal ??
+        (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+          ? AbortSignal.timeout(STRAPI_FETCH_TIMEOUT_MS)
+          : undefined),
+      // Revalidate every 60 seconds so the dashboard stays reasonably fresh.
+      next: { revalidate: 60 },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Unknown connection error";
+
+    throw new StrapiUnavailableError(
+      `Failed to reach Strapi at ${STRAPI_URL}: ${message}`
+    );
+  }
 
   if (!res.ok) {
-    throw new Error(
-      `Strapi request failed: ${res.status} ${res.statusText} - ${url}`
+    throw new StrapiUnavailableError(
+      `Strapi request failed with ${res.status} ${res.statusText}.`
     );
   }
 

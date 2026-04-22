@@ -121,8 +121,7 @@ export default function DashboardLayout({
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    router.replace("/login");
   }
 
   return (

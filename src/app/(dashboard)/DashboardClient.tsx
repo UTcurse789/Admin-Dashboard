@@ -370,11 +370,13 @@ function FlexEChart({
   data,
   variant,
   color,
+  emptyLabel = "No data available",
   onSliceClick,
 }: {
   data: { label: string; count: number }[];
   variant: ChartVariant;
   color?: string;
+  emptyLabel?: string;
   onSliceClick?: (label: string) => void;
 }) {
   const option = useMemo((): EChartsOption => {
@@ -386,8 +388,8 @@ function FlexEChart({
 
   if (!data.length) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-gray-400">
-        No data available
+      <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-sm text-slate-500">
+        {emptyLabel}
       </div>
     );
   }
@@ -421,6 +423,12 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [dialogPage, setDialogPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   const usingClerkFallback = data.userDirectorySource === "clerk";
+  const databaseUnavailableLabel = data.databaseStatusMessage
+    ? `Database analytics are unavailable on this deployment: ${data.databaseStatusMessage}.`
+    : "Database analytics are unavailable on this deployment.";
+  const contentUnavailableLabel = data.contentStatusMessage
+    ? `Content analytics are unavailable on this deployment: ${data.contentStatusMessage}.`
+    : "Content analytics are unavailable on this deployment.";
 
   // Load India GeoJSON from /public/india-states.json and register with ECharts
   useEffect(() => {
@@ -807,6 +815,21 @@ export function DashboardClient({ data }: { data: DashboardData }) {
     safeAudience
   );
   const weeklyActivationRate = percentOf(data.activeLast7Days, safeAudience);
+  const sourceEmptyLabel = data.databaseAvailable
+    ? "No source data is available yet."
+    : databaseUnavailableLabel;
+  const industryEmptyLabel = data.databaseAvailable
+    ? "No industry data is available yet."
+    : databaseUnavailableLabel;
+  const acquisitionEmptyLabel = data.databaseAvailable
+    ? "No acquisition channel data is available yet."
+    : databaseUnavailableLabel;
+  const stateEmptyLabel = data.databaseAvailable
+    ? "No state-level user data is available yet."
+    : databaseUnavailableLabel;
+  const salutationEmptyLabel = data.databaseAvailable
+    ? "No salutation data is available yet."
+    : databaseUnavailableLabel;
 
   const heroMetrics = [
     {
@@ -1021,6 +1044,24 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 {data.databaseStatusMessage
                   ? ` Last connection error: ${data.databaseStatusMessage}.`
                   : ""}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {!data.contentAvailable ? (
+        <div className="rounded-[28px] border border-rose-200 bg-rose-50/80 p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-rose-100 p-2 text-rose-700">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-rose-950">
+                Content analytics are limited because the CMS could not be reached.
+              </p>
+              <p className="text-sm leading-6 text-rose-900">
+                {contentUnavailableLabel}
               </p>
             </div>
           </div>
@@ -1371,6 +1412,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 <FlexEChart
                   data={data.bySource}
                   variant={sourceChart}
+                  emptyLabel={sourceEmptyLabel}
                   onSliceClick={(value) => handleChartClick("source", value, "Source")}
                 />
               </div>
@@ -1379,7 +1421,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 total={safeAudience}
                 accentClass="bg-gradient-to-r from-blue-500 to-cyan-500"
                 onItemClick={(value) => handleChartClick("source", value, "Source")}
-                emptyLabel="No source data is available yet."
+                emptyLabel={sourceEmptyLabel}
               />
             </CardContent>
           </Card>
@@ -1409,6 +1451,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                   data={data.byIndustry.slice(0, 12)}
                   variant={industryChart}
                   color="#8b5cf6"
+                  emptyLabel={industryEmptyLabel}
                   onSliceClick={(value) => handleChartClick("industry", value, "Industry")}
                 />
               </div>
@@ -1417,7 +1460,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 total={safeAudience}
                 accentClass="bg-gradient-to-r from-violet-500 to-fuchsia-500"
                 onItemClick={(value) => handleChartClick("industry", value, "Industry")}
-                emptyLabel="No industry data is available yet."
+                emptyLabel={industryEmptyLabel}
               />
             </CardContent>
           </Card>
@@ -1445,6 +1488,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                   data={data.byDataSource}
                   variant={dataSourceChart}
                   color="#f59e0b"
+                  emptyLabel={acquisitionEmptyLabel}
                   onSliceClick={(value) =>
                     handleChartClick("data_source", value, "Acquisition Channel")
                   }
@@ -1457,7 +1501,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 onItemClick={(value) =>
                   handleChartClick("data_source", value, "Acquisition Channel")
                 }
-                emptyLabel="No acquisition channel data is available yet."
+                emptyLabel={acquisitionEmptyLabel}
               />
             </CardContent>
           </Card>
@@ -1490,7 +1534,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="h-[250px] w-full">
-                {mapReady ? (
+                {mapReady && data.byState.length > 0 ? (
                   <ReactECharts
                     option={indiaMapOption}
                     style={{ height: "100%", width: "100%" }}
@@ -1501,6 +1545,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                     data={data.byState.slice(0, 12)}
                     variant={stateChart}
                     color="#f43f5e"
+                    emptyLabel={stateEmptyLabel}
                     onSliceClick={(value) => handleChartClick("state", value, "State")}
                   />
                 )}
@@ -1510,7 +1555,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 total={safeAudience}
                 accentClass="bg-gradient-to-r from-rose-500 to-red-500"
                 onItemClick={(value) => handleChartClick("state", value, "State")}
-                emptyLabel="No state-level user data is available yet."
+                emptyLabel={stateEmptyLabel}
               />
             </CardContent>
           </Card>
@@ -1540,6 +1585,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                   data={data.bySalutation}
                   variant={salutationChart}
                   color="#06b6d4"
+                  emptyLabel={salutationEmptyLabel}
                   onSliceClick={(value) => handleChartClick("salutation", value, "Salutation")}
                 />
               </div>
@@ -1913,7 +1959,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 text-sm text-slate-500">
-                    No published content for this period.
+                    {data.contentAvailable
+                      ? "No published content for this period."
+                      : contentUnavailableLabel}
                   </div>
                 )}
               </div>
@@ -1944,7 +1992,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 text-sm text-slate-500">
-                    No content type data is available yet.
+                    {data.contentAvailable
+                      ? "No content type data is available yet."
+                      : contentUnavailableLabel}
                   </div>
                 )}
               </div>
@@ -1955,7 +2005,11 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 }))}
                 total={Math.max(data.totalArticles, 1)}
                 accentClass="bg-gradient-to-r from-blue-500 to-indigo-500"
-                emptyLabel="No content categories are available yet."
+                emptyLabel={
+                  data.contentAvailable
+                    ? "No content categories are available yet."
+                    : contentUnavailableLabel
+                }
               />
             </CardContent>
           </Card>

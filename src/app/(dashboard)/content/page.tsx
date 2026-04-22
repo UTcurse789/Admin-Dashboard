@@ -1,4 +1,5 @@
 import {
+  getStrapiUnavailableMessage,
   normalizeStrapiArticle,
   type NormalizedStrapiArticle,
   strapiFetch,
@@ -328,14 +329,14 @@ function buildInsights({
 
 export default async function ContentPage() {
   let articles: ContentArticle[] = [];
-  let fetchError = false;
+  let fetchErrorMessage: string | null = null;
 
   try {
     const result = await getArticles();
     articles = result.articles;
   } catch (error) {
     console.error("Failed to fetch content dataset:", error);
-    fetchError = true;
+    fetchErrorMessage = getStrapiUnavailableMessage(error);
   }
 
   const totalArticles = articles.length;
@@ -564,15 +565,14 @@ export default async function ContentPage() {
         })}
       </div>
 
-      {fetchError && (
+      {fetchErrorMessage && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="py-6 text-center">
             <p className="text-sm font-medium text-red-700">
               Failed to connect to the content source
             </p>
             <p className="mt-1 text-xs text-red-500">
-              Check that `STRAPI_URL` and `STRAPI_ADMIN_TOKEN` are configured
-              correctly.
+              {fetchErrorMessage}
             </p>
           </CardContent>
         </Card>

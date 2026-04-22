@@ -6,19 +6,21 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Lock } from "lucide-react";
+import { LoaderCircle, Lock } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Checking credentials...");
   const router = useRouter();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
+    setLoadingMessage("Checking credentials...");
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -35,8 +37,8 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/");
-      router.refresh();
+      setLoadingMessage("Opening dashboard...");
+      router.replace("/");
     } catch {
       setError("Something went wrong. Try again.");
       setLoading(false);
@@ -58,7 +60,23 @@ export default function LoginPage() {
           />
         </div>
 
-        <Card className="shadow-lg">
+        <Card className="relative overflow-hidden shadow-lg">
+          {loading ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/85 backdrop-blur-sm">
+              <div className="mx-6 flex w-full max-w-xs flex-col items-center rounded-2xl border border-gray-200 bg-white px-5 py-6 text-center shadow-lg">
+                <div className="flex size-12 items-center justify-center rounded-full bg-gray-100">
+                  <LoaderCircle className="h-6 w-6 animate-spin text-gray-700" />
+                </div>
+                <p className="mt-4 text-sm font-medium text-gray-900">
+                  {loadingMessage}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">
+                  Preparing the admin dashboard and loading the latest data.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           <CardHeader className="pb-4 text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-gray-100">
               <Lock className="h-5 w-5 text-gray-600" />
@@ -71,7 +89,7 @@ export default function LoginPage() {
             </p>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4" aria-busy={loading}>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">
                   Email
@@ -82,6 +100,8 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  autoComplete="email"
+                  disabled={loading}
                   className="border-gray-200 bg-gray-50 focus:bg-white"
                 />
               </div>
@@ -95,6 +115,8 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  autoComplete="current-password"
+                  disabled={loading}
                   className="border-gray-200 bg-gray-50 focus:bg-white"
                 />
               </div>
@@ -110,7 +132,14 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full bg-gray-900 text-white hover:bg-gray-800"
               >
-                {loading ? "Signing in..." : "Sign In"}
+                {loading ? (
+                  <>
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
               </Button>
             </form>
           </CardContent>
