@@ -25,26 +25,26 @@ const MAX_DAILY_REG_ROWS = parseBoundedInt(
 );
 const DB_CONNECTION_TIMEOUT_MS = parseBoundedInt(
   process.env.DB_CONNECTION_TIMEOUT_MS,
-  isProduction ? 8000 : 1500,
+  isProduction ? 20000 : 1500,
   250,
-  30000
+  60000
 );
 const DB_QUERY_TIMEOUT_MS = parseBoundedInt(
   process.env.DB_QUERY_TIMEOUT_MS,
-  isProduction ? 15000 : 8000,
+  isProduction ? 25000 : 8000,
   500,
   120000
 );
 const DB_POOL_MAX = parseBoundedInt(process.env.DB_POOL_MAX, 3, 1, 20);
 const DB_CONNECT_ATTEMPTS = parseBoundedInt(
   process.env.DB_CONNECT_ATTEMPTS,
-  isProduction ? 2 : 1,
+  isProduction ? 3 : 1,
   1,
   5
 );
 const DB_CONNECT_RETRY_DELAY_MS = parseBoundedInt(
   process.env.DB_CONNECT_RETRY_DELAY_MS,
-  isProduction ? 400 : 0,
+  isProduction ? 1000 : 0,
   0,
   5000
 );
