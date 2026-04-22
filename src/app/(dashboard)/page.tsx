@@ -1,53 +1,24 @@
-import { clerkClient } from "@clerk/nextjs/server";
 import {
   normalizeStrapiArticle,
   strapiFetch,
   StrapiArticle,
   StrapiResponse,
 } from "@/lib/strapi";
-import { getDbAnalytics } from "@/lib/db";
+import { getDbAnalytics, getDatabaseUnavailableMessage } from "@/lib/db";
 import { getJourneyDashboardData } from "@/lib/dashboard-journey";
 import type { CountRow, DailyCount, DbUser } from "@/lib/db";
+import {
+  buildDailyRegistrationsFromClerkUsers,
+  getClerkUsersSnapshot,
+  mapClerkUsersToDbUsers,
+  type ClerkUsersSnapshot,
+} from "@/lib/clerk-users";
 import { DashboardClient } from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const preferredRegion = ["bom1", "sin1"];
 export const maxDuration = 30;
-
-function parseBoundedInt(
-  value: string | undefined,
-  fallback: number,
-  minimum: number,
-  maximum: number
-) {
-  const parsed = Number.parseInt(value ?? "", 10);
-
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-
-  return Math.min(Math.max(parsed, minimum), maximum);
-}
-
-const DASHBOARD_CLERK_PAGE_SIZE = parseBoundedInt(
-  process.env.DASHBOARD_CLERK_PAGE_SIZE,
-  500,
-  50,
-  500
-);
-const DASHBOARD_MAX_CLERK_PAGES = parseBoundedInt(
-  process.env.DASHBOARD_MAX_CLERK_PAGES,
-  4,
-  1,
-  20
-);
-const DASHBOARD_CLERK_LOOKBACK_DAYS = parseBoundedInt(
-  process.env.DASHBOARD_CLERK_LOOKBACK_DAYS,
-  400,
-  30,
-  3650
-);
 
 export interface DailyDataPoint {
   date: string;
@@ -72,11 +43,6 @@ export interface ArticleRecord {
   title: string;
   type: string;
   publishedAt: string | null;
-}
-
-interface ClerkUsersSnapshot {
-  users: UserRecord[];
-  totalCount: number;
 }
 
 export interface DashboardData {
@@ -112,6 +78,9 @@ export interface DashboardData {
   dailyRegistrations: DailyCount[];
   recentDbUsers: DbUser[];
   journeyAnalytics: Awaited<ReturnType<typeof getJourneyDashboardData>>;
+  databaseAvailable: boolean;
+  databaseStatusMessage: string | null;
+  userDirectorySource: "database" | "clerk";
 }
 
 function toDateKey(ts: number): string {
@@ -176,7 +145,7 @@ function getEmptyJourneyData(): Awaited<
 }
 
 async function getDashboardData(): Promise<DashboardData> {
-  const clerkUsersPromise = getClerkUsers();
+  const clerkUsersPromise = getClerkUsersSnapshot();
   const [clerkUsersResult, strapiResult, dbResult] = await Promise.allSettled([
     clerkUsersPromise,
     getStrapiData(),
@@ -204,8 +173,15 @@ async function getDashboardData(): Promise<DashboardData> {
       ? strapiResult.value
       : getEmptyStrapiData();
   const dbData = dbResult.status === "fulfilled" ? dbResult.value : null;
-  const databaseUnavailable =
-    dbData?.queryErrors.some((error) => error.startsWith("database:")) ?? false;
+  const databaseStatusMessage =
+    dbResult.status === "fulfilled"
+      ? getDatabaseUnavailableMessage(dbResult.value.queryErrors)
+      : "Database analytics could not be loaded.";
+  const databaseUnavailable = Boolean(databaseStatusMessage);
+  const useClerkDirectoryFallback =
+    databaseUnavailable &&
+    clerkUsersResult.status === "fulfilled" &&
+    clerkUsersResult.value.users.length > 0;
 
   let journeyAnalytics = getEmptyJourneyData();
 
@@ -216,75 +192,42 @@ async function getDashboardData(): Promise<DashboardData> {
       );
     } catch (error) {
       console.error("Journey analytics failed:", error);
-    }
+      }
   }
+
+  const fallbackUsers =
+    clerkUsersResult.status === "fulfilled"
+      ? mapClerkUsersToDbUsers(clerkUsersResult.value.users)
+      : [];
+  const fallbackDailyRegistrations =
+    clerkUsersResult.status === "fulfilled"
+      ? buildDailyRegistrationsFromClerkUsers(clerkUsersResult.value.users)
+      : [];
 
   return {
     ...clerkData,
     ...strapiData,
-    dbTotalUsers: dbData?.totalDbUsers ?? 0,
+    dbTotalUsers: useClerkDirectoryFallback
+      ? clerkUsersResult.value.totalCount
+      : dbData?.totalDbUsers ?? 0,
     bySource: dbData?.bySource ?? [],
     byDataSource: dbData?.byDataSource ?? [],
     bySalutation: dbData?.bySalutation ?? [],
     byIndustry: dbData?.byIndustry ?? [],
     byState: dbData?.byState ?? [],
-    dailyRegistrations: dbData?.dailyRegistrations ?? [],
-    recentDbUsers: dbData?.recentDbUsers ?? [],
+    dailyRegistrations: useClerkDirectoryFallback
+      ? fallbackDailyRegistrations
+      : dbData?.dailyRegistrations ?? [],
+    recentDbUsers: useClerkDirectoryFallback
+      ? fallbackUsers
+      : dbData?.recentDbUsers ?? [],
     growthRate: dbData?.growthRate ?? 0,
     growthThisMonth: dbData?.thisMonthCount ?? 0,
     growthLastMonth: dbData?.lastMonthCount ?? 0,
     journeyAnalytics,
-  };
-}
-
-async function getClerkUsers(): Promise<ClerkUsersSnapshot> {
-  const client = await clerkClient();
-  const users: UserRecord[] = [];
-  let offset = 0;
-  const limit = DASHBOARD_CLERK_PAGE_SIZE;
-  let totalCount = 0;
-  let pagesFetched = 0;
-  const lookbackCutoff =
-    Date.now() - DASHBOARD_CLERK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
-
-  while (true) {
-    const response = await client.users.getUserList({
-      limit,
-      offset,
-      orderBy: "-created_at",
-    });
-    totalCount = response.totalCount;
-    pagesFetched += 1;
-
-    users.push(
-      ...response.data.map((user) => ({
-        id: user.id,
-        email: user.emailAddresses[0]?.emailAddress || "No email",
-        firstName: user.firstName || "",
-        lastName: user.lastName || "",
-        createdAt: user.createdAt,
-        lastSignInAt: user.lastSignInAt,
-      }))
-    );
-
-    const oldestFetchedCreatedAt =
-      response.data[response.data.length - 1]?.createdAt ?? null;
-
-    if (
-      response.data.length < limit ||
-      pagesFetched >= DASHBOARD_MAX_CLERK_PAGES ||
-      (oldestFetchedCreatedAt !== null &&
-        oldestFetchedCreatedAt < lookbackCutoff)
-    ) {
-      break;
-    }
-
-    offset += limit;
-  }
-
-  return {
-    users,
-    totalCount: Math.max(totalCount, users.length),
+    databaseAvailable: !databaseUnavailable,
+    databaseStatusMessage,
+    userDirectorySource: useClerkDirectoryFallback ? "clerk" : "database",
   };
 }
 

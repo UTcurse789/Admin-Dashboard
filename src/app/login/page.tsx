@@ -52,7 +52,8 @@ export default function LoginPage() {
             alt="EnerDive"
             width={160}
             height={40}
-            priority
+            preload
+            style={{ width: "auto" }}
             className="h-10 w-auto"
           />
         </div>

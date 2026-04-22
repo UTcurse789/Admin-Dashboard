@@ -59,7 +59,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           alt="EnerDive"
           width={128}
           height={32}
-          priority
+          preload
+          style={{ width: "auto" }}
           className="h-8 w-auto"
         />
       </div>
