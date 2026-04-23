@@ -62,7 +62,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           width={128}
           height={32}
           preload
-          style={{ width: "auto" }}
+          style={{ width: "auto", height: "auto" }}
           className="h-8 w-auto"
         />
       </div>

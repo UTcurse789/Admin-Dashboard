@@ -12,6 +12,8 @@ const CONTACT_COVERAGE_FIELDS = [
   { key: "INDUSTRY", label: "Industry" },
   { key: "COMMUNITY", label: "Community" },
   { key: "SOURCE", label: "Source" },
+  { key: "FREQUENCY", label: "Frequency" },
+  { key: "PREFERENCE", label: "Preference" },
   { key: "UTM_SOURCE", label: "UTM source" },
   { key: "UTM_MEDIUM", label: "UTM medium" },
   { key: "UTM_CAMPAIGN", label: "UTM campaign" },
@@ -229,6 +231,19 @@ export interface BrevoInsight {
   detail: string;
 }
 
+export interface BrevoBreakdownContactRecord {
+  id: number;
+  email: string | null;
+  firstName: string | null;
+  organisation: string | null;
+  createdAt: string;
+  value: string;
+}
+
+export interface BrevoBreakdownWithContacts extends BrevoBreakdownItem {
+  contacts: BrevoBreakdownContactRecord[];
+}
+
 export interface BrevoAnalyticsData {
   available: boolean;
   statusMessage: string | null;
@@ -267,6 +282,11 @@ export interface BrevoAnalyticsData {
     industryBreakdown: BrevoBreakdownItem[];
     sourceBreakdown: BrevoBreakdownItem[];
     communityBreakdown: BrevoBreakdownItem[];
+    frequencyBreakdown: BrevoBreakdownWithContacts[];
+    preferenceBreakdown: BrevoBreakdownWithContacts[];
+    utmCampaignBreakdown: BrevoBreakdownWithContacts[];
+    utmMediumBreakdown: BrevoBreakdownWithContacts[];
+    utmSourceBreakdown: BrevoBreakdownWithContacts[];
     profileCoverage: BrevoCoverageField[];
     recentContacts: BrevoRecentContact[];
   };
@@ -409,6 +429,48 @@ function groupToBreakdown(
       share: percentage(count, total),
     }))
     .sort((left, right) => right.count - left.count)
+    .slice(0, limit);
+}
+
+function groupToBreakdownWithContacts(
+  contacts: BrevoContactRecord[],
+  attrKey: string,
+  total: number,
+  limit = 8
+): BrevoBreakdownWithContacts[] {
+  const buckets = new Map<string, BrevoContactRecord[]>();
+
+  contacts.forEach((contact) => {
+    const raw = getTextAttribute(contact, attrKey);
+    const values = attrKey === "COMMUNITY"
+      ? splitMultiValue(raw)
+      : raw
+        ? [raw]
+        : [];
+
+    values.forEach((value) => {
+      const normalized = value.trim();
+      if (!normalized) return;
+      if (!buckets.has(normalized)) buckets.set(normalized, []);
+      buckets.get(normalized)!.push(contact);
+    });
+  });
+
+  return Array.from(buckets.entries())
+    .map(([label, matched]) => ({
+      label,
+      count: matched.length,
+      share: percentage(matched.length, total),
+      contacts: matched.slice(0, 50).map((c) => ({
+        id: c.id,
+        email: c.email,
+        firstName: getTextAttribute(c, "FIRSTNAME"),
+        organisation: getTextAttribute(c, "ORGANISATION"),
+        createdAt: c.createdAt,
+        value: label,
+      })),
+    }))
+    .sort((a, b) => b.count - a.count)
     .slice(0, limit);
 }
 
@@ -571,6 +633,11 @@ function buildUnavailableData(statusMessage: string): BrevoAnalyticsData {
       industryBreakdown: [],
       sourceBreakdown: [],
       communityBreakdown: [],
+      frequencyBreakdown: [],
+      preferenceBreakdown: [],
+      utmCampaignBreakdown: [],
+      utmMediumBreakdown: [],
+      utmSourceBreakdown: [],
       profileCoverage: [],
       recentContacts: [],
     },
@@ -756,6 +823,41 @@ export async function getBrevoAnalytics(): Promise<BrevoAnalyticsData> {
 
     const communityBreakdown = groupToBreakdown(
       contacts.flatMap((contact) => splitMultiValue(getTextAttribute(contact, "COMMUNITY"))),
+      Math.max(totalContacts, 1),
+      8
+    );
+
+    const frequencyBreakdown = groupToBreakdownWithContacts(
+      contacts,
+      "FREQUENCY",
+      Math.max(totalContacts, 1),
+      8
+    );
+
+    const preferenceBreakdown = groupToBreakdownWithContacts(
+      contacts,
+      "PREFERENCE",
+      Math.max(totalContacts, 1),
+      8
+    );
+
+    const utmCampaignBreakdown = groupToBreakdownWithContacts(
+      contacts,
+      "UTM_CAMPAIGN",
+      Math.max(totalContacts, 1),
+      8
+    );
+
+    const utmMediumBreakdown = groupToBreakdownWithContacts(
+      contacts,
+      "UTM_MEDIUM",
+      Math.max(totalContacts, 1),
+      8
+    );
+
+    const utmSourceBreakdown = groupToBreakdownWithContacts(
+      contacts,
+      "UTM_SOURCE",
       Math.max(totalContacts, 1),
       8
     );
@@ -982,6 +1084,11 @@ export async function getBrevoAnalytics(): Promise<BrevoAnalyticsData> {
         industryBreakdown,
         sourceBreakdown,
         communityBreakdown,
+        frequencyBreakdown,
+        preferenceBreakdown,
+        utmCampaignBreakdown,
+        utmMediumBreakdown,
+        utmSourceBreakdown,
         profileCoverage,
         recentContacts,
       },
