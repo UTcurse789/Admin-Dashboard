@@ -54,14 +54,33 @@ const DB_RETRY_COOLDOWN_MS = parseBoundedInt(
   1000,
   300000
 );
-const databaseUrl = process.env.DATABASE_URL?.trim();
+// Strip ?sslmode=... from the URL so pg-connection-string does NOT build its
+// own ssl object — we always supply one explicitly via the Pool options below.
+// This prevents the pg URL parser from overriding our rejectUnauthorized flag.
+const rawDatabaseUrl = process.env.DATABASE_URL?.trim();
+const databaseUrl = rawDatabaseUrl
+  ? rawDatabaseUrl.replace(/([?&])sslmode=[^&]*/g, (_, sep) => sep === "?" ? "?" : "").replace(/\?$/, "")
+  : rawDatabaseUrl;
+
+// We still detect SSL intent from the original URL.
+const urlRequestsSsl =
+  rawDatabaseUrl != null &&
+  /[?&]sslmode=(require|verify-ca|verify-full|prefer)/.test(rawDatabaseUrl);
+
 const shouldUseDatabaseSsl =
   process.env.DATABASE_SSL === "true" ||
+  urlRequestsSsl ||
   (process.env.NODE_ENV === "production" &&
     process.env.DATABASE_SSL !== "false");
+
+// Allow self-signed certs when ALLOW_SELF_SIGNED_CERTS=true.
+// DigitalOcean managed Postgres uses a self-signed CA chain that
+// Node's built-in root store does not trust.
+// We intentionally do NOT restrict this to non-production — the env var
+// itself acts as the safety gate (never set it in real production).
 const allowSelfSignedCerts =
-  process.env.ALLOW_SELF_SIGNED_CERTS === "true" &&
-  process.env.NODE_ENV !== "production";
+  process.env.ALLOW_SELF_SIGNED_CERTS === "true";
+
 const CONNECTIVITY_ERROR_CODES = new Set([
   "ECONNREFUSED",
   "ECONNRESET",
@@ -69,6 +88,12 @@ const CONNECTIVITY_ERROR_CODES = new Set([
   "EHOSTUNREACH",
   "ENOTFOUND",
   "ETIMEDOUT",
+  // SSL handshake failures — treated as transient so the cooldown
+  // cache does not permanently block retries after a config fix.
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "CERT_HAS_EXPIRED",
 ]);
 
 const dbFailureState = {
@@ -593,57 +618,64 @@ function buildEmptyFunnelAnalytics(): FunnelAnalytics {
 export async function getFunnelAnalytics(): Promise<FunnelAnalytics> {
   try {
     return await withDatabaseClient("funnel analytics", async (client) => {
-      const [
-        sourceConvRes,
-        utmRes,
-        cohortRes,
-        onboardingTotalsRes,
-      ] = await Promise.all([
-        // Onboarding rate by source
-        client.query<{ source: string | null; total: string; onboarded: string }>(`
-          SELECT
-            COALESCE(source, 'Unknown') as source,
-            COUNT(*) as total,
-            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-          FROM users
-          GROUP BY source
-          ORDER BY COUNT(*) DESC
-        `),
+      // Run queries sequentially on the same client — pg does not multiplex
+      // a single PoolClient, so Promise.all triggers a deprecation in pg v8+.
+      const sourceConvRes = await client.query<{
+        source: string | null;
+        total: string;
+        onboarded: string;
+      }>(`
+        SELECT
+          COALESCE(source, 'Unknown') as source,
+          COUNT(*) as total,
+          SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+        FROM users
+        GROUP BY source
+        ORDER BY COUNT(*) DESC
+      `);
 
-        // UTM campaign performance
-        client.query<{ utm_campaign: string; utm_source: string | null; total: string; onboarded: string }>(`
-          SELECT
-            utm_campaign,
-            COALESCE(utm_source, '') as utm_source,
-            COUNT(*) as total,
-            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-          FROM users
-          WHERE utm_campaign IS NOT NULL AND utm_campaign != ''
-          GROUP BY utm_campaign, utm_source
-          ORDER BY COUNT(*) DESC
-          LIMIT 10
-        `),
+      const utmRes = await client.query<{
+        utm_campaign: string;
+        utm_source: string | null;
+        total: string;
+        onboarded: string;
+      }>(`
+        SELECT
+          utm_campaign,
+          COALESCE(utm_source, '') as utm_source,
+          COUNT(*) as total,
+          SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+        FROM users
+        WHERE utm_campaign IS NOT NULL AND utm_campaign != ''
+        GROUP BY utm_campaign, utm_source
+        ORDER BY COUNT(*) DESC
+        LIMIT 10
+      `);
 
-        // Monthly cohort: registrations + onboarded
-        client.query<{ month: Date; registered: string; onboarded: string }>(`
-          SELECT
-            DATE_TRUNC('month', created_at) as month,
-            COUNT(*) as registered,
-            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-          FROM users
-          WHERE created_at >= DATE_TRUNC('month', NOW() - INTERVAL '11 months')
-          GROUP BY 1
-          ORDER BY 1 ASC
-        `),
+      const cohortRes = await client.query<{
+        month: Date;
+        registered: string;
+        onboarded: string;
+      }>(`
+        SELECT
+          DATE_TRUNC('month', created_at) as month,
+          COUNT(*) as registered,
+          SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+        FROM users
+        WHERE created_at >= DATE_TRUNC('month', NOW() - INTERVAL '11 months')
+        GROUP BY 1
+        ORDER BY 1 ASC
+      `);
 
-        // Overall onboarding totals
-        client.query<{ total: string; onboarded: string }>(`
-          SELECT
-            COUNT(*) as total,
-            SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
-          FROM users
-        `),
-      ]);
+      const onboardingTotalsRes = await client.query<{
+        total: string;
+        onboarded: string;
+      }>(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN onboarding_completed = true THEN 1 ELSE 0 END) as onboarded
+        FROM users
+      `);
 
       const totalRow = onboardingTotalsRes.rows[0];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import {
@@ -27,9 +27,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import type {
   BrevoAnalyticsData,
   BrevoBreakdownItem,
+  BrevoBreakdownWithContacts,
+  BrevoBreakdownContactRecord,
   BrevoCampaignPerformance,
   BrevoDailyMetric,
 } from "@/lib/brevo";
@@ -359,6 +368,32 @@ function metricCards(data: BrevoAnalyticsData) {
 }
 
 export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
+  const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const [drilldownTitle, setDrilldownTitle] = useState("");
+  const [drilldownContacts, setDrilldownContacts] = useState<BrevoBreakdownContactRecord[]>([]);
+
+  const openDrilldown = useCallback(
+    (title: string, contacts: BrevoBreakdownContactRecord[]) => {
+      setDrilldownTitle(title);
+      setDrilldownContacts(contacts);
+      setDrilldownOpen(true);
+    },
+    []
+  );
+
+  const handleChartClick = useCallback(
+    (items: BrevoBreakdownWithContacts[], sectionLabel: string) =>
+      (params: { name?: string }) => {
+        const clicked = items.find(
+          (item) => item.label === params.name || clampLabel(item.label, 20) === params.name
+        );
+        if (clicked) {
+          openDrilldown(`${sectionLabel} — ${clicked.label}`, clicked.contacts);
+        }
+      },
+    [openDrilldown]
+  );
+
   const heroMetrics = useMemo(() => metricCards(data), [data]);
   const topLists = data.contacts.listBreakdown.slice(0, 5);
   const topDomains = data.contacts.domainBreakdown.slice(0, 6);
@@ -366,6 +401,12 @@ export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
   const topCommunities = data.contacts.communityBreakdown.slice(0, 6);
   const topCampaigns = data.campaigns.recentSent.slice(0, 5);
   const topEvents = data.transactional.eventBreakdown.slice(0, 6);
+
+  const topFrequency = data.contacts.frequencyBreakdown.slice(0, 6);
+  const topPreference = data.contacts.preferenceBreakdown.slice(0, 6);
+  const topUtmCampaign = data.contacts.utmCampaignBreakdown.slice(0, 6);
+  const topUtmMedium = data.contacts.utmMediumBreakdown.slice(0, 6);
+  const topUtmSource = data.contacts.utmSourceBreakdown.slice(0, 6);
 
   const contactTrendOption = useMemo(
     () => buildLineOption(data.contacts.trend30d),
@@ -395,6 +436,26 @@ export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
   const eventMixOption = useMemo(
     () => buildHorizontalBarOption(topEvents, "#ea580c"),
     [topEvents]
+  );
+  const frequencyOption = useMemo(
+    () => buildHorizontalBarOption(topFrequency, "#0891b2"),
+    [topFrequency]
+  );
+  const preferenceOption = useMemo(
+    () => buildDonutOption(topPreference),
+    [topPreference]
+  );
+  const utmCampaignOption = useMemo(
+    () => buildHorizontalBarOption(topUtmCampaign, "#7c3aed"),
+    [topUtmCampaign]
+  );
+  const utmMediumOption = useMemo(
+    () => buildDonutOption(topUtmMedium),
+    [topUtmMedium]
+  );
+  const utmSourceOption = useMemo(
+    () => buildHorizontalBarOption(topUtmSource, "#65a30d"),
+    [topUtmSource]
   );
 
   if (!data.available) {
@@ -881,6 +942,272 @@ export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
 
       <section className="space-y-5">
         {sectionHeading(
+          "Engagement profiling",
+          "Frequency and content preference distribution across the contact base",
+          "These attribute-level breakdowns reveal how contacts self-select into frequency tiers and content preference categories. Click any bar or segment to drill into the underlying contacts."
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: "Frequency values",
+              value: formatCount(topFrequency.reduce((s, i) => s + i.count, 0)),
+              detail: `${topFrequency.length} distinct values captured`,
+              icon: BarChart3,
+            },
+            {
+              label: "Top frequency",
+              value: topFrequency[0]?.label ?? "-",
+              detail: topFrequency[0]
+                ? `${formatCount(topFrequency[0].count)} contacts (${formatPercent(topFrequency[0].share)})`
+                : "No data",
+              icon: Activity,
+            },
+            {
+              label: "Preference values",
+              value: formatCount(topPreference.reduce((s, i) => s + i.count, 0)),
+              detail: `${topPreference.length} distinct values captured`,
+              icon: BadgeCheck,
+            },
+            {
+              label: "Top preference",
+              value: topPreference[0]?.label ?? "-",
+              detail: topPreference[0]
+                ? `${formatCount(topPreference[0].count)} contacts (${formatPercent(topPreference[0].share)})`
+                : "No data",
+              icon: Sparkles,
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Card key={item.label} className="border border-slate-200 bg-white shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    {item.label}
+                  </CardTitle>
+                  <div className="rounded-2xl bg-slate-50 p-2">
+                    <Icon className="h-4 w-4 text-slate-700" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold tracking-tight text-slate-950 truncate">
+                    {item.value}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">{item.detail}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Card className="border border-slate-200 bg-white shadow-sm">
+            <CardHeader className="space-y-3 pb-2">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-cyan-600" />
+                <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
+                  Frequency distribution
+                </CardTitle>
+              </div>
+              <p className="text-sm text-slate-500">
+                Click any bar to see the contacts in that frequency tier.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[320px] w-full">
+                {topFrequency.length > 0 ? (
+                  <ReactECharts
+                    option={frequencyOption}
+                    style={{ height: "100%", width: "100%" }}
+                    notMerge
+                    onEvents={{
+                      click: handleChartClick(topFrequency, "Frequency"),
+                    }}
+                  />
+                ) : (
+                  emptyChart("No frequency data has been captured yet.")
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-slate-200 bg-white shadow-sm">
+            <CardHeader className="space-y-3 pb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-rose-500" />
+                <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
+                  Preference breakdown
+                </CardTitle>
+              </div>
+              <p className="text-sm text-slate-500">
+                Click any segment to see the contacts with that preference.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[320px] w-full">
+                {topPreference.length > 0 ? (
+                  <ReactECharts
+                    option={preferenceOption}
+                    style={{ height: "100%", width: "100%" }}
+                    notMerge
+                    onEvents={{
+                      click: handleChartClick(topPreference, "Preference"),
+                    }}
+                  />
+                ) : (
+                  emptyChart("No preference data has been captured yet.")
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-5">
+        {sectionHeading(
+          "UTM attribution",
+          "Understand which campaigns, mediums, and sources are driving contact acquisition",
+          "UTM fields show how contacts arrived. Click any chart element to reveal the contacts tagged with that UTM value."
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[
+            {
+              label: "UTM campaigns tagged",
+              value: formatCount(topUtmCampaign.reduce((s, i) => s + i.count, 0)),
+              detail: `${topUtmCampaign.length} distinct campaigns`,
+              icon: Send,
+            },
+            {
+              label: "UTM mediums tagged",
+              value: formatCount(topUtmMedium.reduce((s, i) => s + i.count, 0)),
+              detail: `${topUtmMedium.length} distinct mediums`,
+              icon: Mail,
+            },
+            {
+              label: "UTM sources tagged",
+              value: formatCount(topUtmSource.reduce((s, i) => s + i.count, 0)),
+              detail: `${topUtmSource.length} distinct sources`,
+              icon: MousePointerClick,
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Card key={item.label} className="border border-slate-200 bg-white shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    {item.label}
+                  </CardTitle>
+                  <div className="rounded-2xl bg-slate-50 p-2">
+                    <Icon className="h-4 w-4 text-slate-700" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-semibold tracking-tight text-slate-950">
+                    {item.value}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">{item.detail}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-3">
+          <Card className="border border-slate-200 bg-white shadow-sm">
+            <CardHeader className="space-y-3 pb-2">
+              <div className="flex items-center gap-2">
+                <Send className="h-4 w-4 text-violet-600" />
+                <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
+                  UTM Campaign
+                </CardTitle>
+              </div>
+              <p className="text-sm text-slate-500">
+                Click a bar to drill into contacts.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[320px] w-full">
+                {topUtmCampaign.length > 0 ? (
+                  <ReactECharts
+                    option={utmCampaignOption}
+                    style={{ height: "100%", width: "100%" }}
+                    notMerge
+                    onEvents={{
+                      click: handleChartClick(topUtmCampaign, "UTM Campaign"),
+                    }}
+                  />
+                ) : (
+                  emptyChart("No UTM campaign values captured.")
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-slate-200 bg-white shadow-sm">
+            <CardHeader className="space-y-3 pb-2">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-blue-600" />
+                <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
+                  UTM Medium
+                </CardTitle>
+              </div>
+              <p className="text-sm text-slate-500">
+                Click a segment to drill into contacts.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[320px] w-full">
+                {topUtmMedium.length > 0 ? (
+                  <ReactECharts
+                    option={utmMediumOption}
+                    style={{ height: "100%", width: "100%" }}
+                    notMerge
+                    onEvents={{
+                      click: handleChartClick(topUtmMedium, "UTM Medium"),
+                    }}
+                  />
+                ) : (
+                  emptyChart("No UTM medium values captured.")
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-slate-200 bg-white shadow-sm">
+            <CardHeader className="space-y-3 pb-2">
+              <div className="flex items-center gap-2">
+                <MousePointerClick className="h-4 w-4 text-green-600" />
+                <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
+                  UTM Source
+                </CardTitle>
+              </div>
+              <p className="text-sm text-slate-500">
+                Click a bar to drill into contacts.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[320px] w-full">
+                {topUtmSource.length > 0 ? (
+                  <ReactECharts
+                    option={utmSourceOption}
+                    style={{ height: "100%", width: "100%" }}
+                    notMerge
+                    onEvents={{
+                      click: handleChartClick(topUtmSource, "UTM Source"),
+                    }}
+                  />
+                ) : (
+                  emptyChart("No UTM source values captured.")
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-5">
+        {sectionHeading(
           "Campaign intelligence",
           "Evaluate recent Brevo email campaigns beyond send counts",
           "The campaign layer compares delivered volume, open rate, click-through depth, and bounce pressure to show which messages actually worked."
@@ -1332,6 +1659,81 @@ export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
           </CardContent>
         </Card>
       </section>
+
+      <Dialog open={drilldownOpen} onOpenChange={setDrilldownOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold tracking-tight text-slate-950">
+              {drilldownTitle}
+            </DialogTitle>
+            <DialogDescription>
+              {drilldownContacts.length} contact{drilldownContacts.length !== 1 ? "s" : ""} in this
+              segment. Showing up to 50 records.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-auto flex-1 -mx-4 px-4">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-slate-100 hover:bg-transparent">
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Contact
+                  </TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Organisation
+                  </TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Value
+                  </TableHead>
+                  <TableHead className="text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    Added
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {drilldownContacts.length > 0 ? (
+                  drilldownContacts.map((contact) => (
+                    <TableRow
+                      key={contact.id}
+                      className="border-b border-slate-50 transition-colors hover:bg-slate-50/60"
+                    >
+                      <TableCell>
+                        <div>
+                          <p className="text-sm font-medium text-slate-950">
+                            {contact.firstName ?? "Unknown"}
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-400">
+                            {contact.email ?? "No email"}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {contact.organisation ?? "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[11px]">
+                          {contact.value}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-slate-500">
+                        {formatDate(contact.createdAt, { year: "numeric" })}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={4}
+                      className="py-10 text-center text-sm text-slate-500"
+                    >
+                      No contacts found for this segment.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

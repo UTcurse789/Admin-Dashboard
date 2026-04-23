@@ -56,6 +56,41 @@ export async function GET(req: NextRequest) {
         LIMIT $2 OFFSET $3
       `;
       params = [value, limit, offset];
+    } else if (key === "kpi") {
+      if (value === "total-users" || value === "registered") {
+        query = `
+          ${baseSelect}
+          ORDER BY users.created_at DESC
+          LIMIT $1 OFFSET $2
+        `;
+        params = [limit, offset];
+      } else if (value === "new-this-month") {
+        query = `
+          ${baseSelect}
+          WHERE date_trunc('month', users.created_at) = date_trunc('month', CURRENT_DATE)
+          ORDER BY users.created_at DESC
+          LIMIT $1 OFFSET $2
+        `;
+        params = [limit, offset];
+      } else if (value === "prev-month") {
+        query = `
+          ${baseSelect}
+          WHERE date_trunc('month', users.created_at) = date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
+          ORDER BY users.created_at DESC
+          LIMIT $1 OFFSET $2
+        `;
+        params = [limit, offset];
+      } else if (value === "active-7-days") {
+        query = `
+          ${baseSelect}
+          WHERE COALESCE(users.updated_at, users.created_at) >= NOW() - INTERVAL '7 days'
+          ORDER BY COALESCE(users.updated_at, users.created_at) DESC
+          LIMIT $1 OFFSET $2
+        `;
+        params = [limit, offset];
+      } else {
+        return NextResponse.json({ error: "Invalid KPI value." }, { status: 400 });
+      }
     } else if (
       ["source", "data_source", "state", "salutation"].includes(key)
     ) {

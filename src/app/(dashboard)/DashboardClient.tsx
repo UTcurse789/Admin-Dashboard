@@ -14,7 +14,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   Users, UserPlus, Activity, FileText, ArrowRight, Download, Filter,
   TrendingUp, BarChart3, Calendar, Mail,
@@ -1234,12 +1234,13 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 return (
                   <div
                     key={metric.key}
-                    className={`rounded-[26px] border p-4 ${metric.cardClass}`}
+                    className={`rounded-[26px] border p-4 cursor-pointer transition-all hover:scale-[1.02] ${metric.cardClass}`}
+                    onClick={() => handleChartClick("kpi", metric.key, metric.label)}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p
-                          className={`text-[11px] font-semibold uppercase tracking-[0.18em] truncate ${metric.labelClass}`}
+                          className={`text-[11px] font-semibold uppercase tracking-[0.18em] break-words ${metric.labelClass}`}
                         >
                           {metric.label}
                         </p>
@@ -1281,12 +1282,13 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                 {journeyStages.map((stage, idx) => (
                   <div
                     key={stage.key}
-                    className="relative group"
+                    className="relative group cursor-pointer transition-all hover:scale-[1.02]"
+                    onClick={() => handleChartClick("kpi", stage.key, stage.label)}
                   >
                     <div className="h-full rounded-[24px] border border-white bg-white px-5 py-5 shadow-sm transition-all hover:shadow-md hover:border-slate-200">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] break-words text-slate-400">
                             {stage.label}
                           </p>
                           <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
@@ -2335,6 +2337,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
             <DialogTitle className="text-xl font-bold tracking-tight text-gray-900">
               {selectedFilter?.label}: <span className="text-emerald-600">{selectedFilter?.value}</span>
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Filtered user list for {selectedFilter?.label}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto bg-gray-50/30 p-6">
             {isDialogLoading ? (
