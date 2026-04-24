@@ -1,3 +1,4 @@
+import { attachDatabasePool } from "@vercel/functions";
 import pg, { type QueryResultRow } from "pg";
 
 function parseBoundedInt(
@@ -35,6 +36,12 @@ const DB_QUERY_TIMEOUT_MS = parseBoundedInt(
   500,
   120000
 );
+const DB_IDLE_TIMEOUT_MS = parseBoundedInt(
+  process.env.DB_IDLE_TIMEOUT_MS,
+  process.env.VERCEL ? 5000 : 30000,
+  1000,
+  60000
+);
 const DB_POOL_MAX = parseBoundedInt(process.env.DB_POOL_MAX, 3, 1, 20);
 const DB_CONNECT_ATTEMPTS = parseBoundedInt(
   process.env.DB_CONNECT_ATTEMPTS,
@@ -57,7 +64,8 @@ const DB_RETRY_COOLDOWN_MS = parseBoundedInt(
 // Strip ?sslmode=... from the URL so pg-connection-string does NOT build its
 // own ssl object — we always supply one explicitly via the Pool options below.
 // This prevents the pg URL parser from overriding our rejectUnauthorized flag.
-const rawDatabaseUrl = process.env.DATABASE_URL?.trim();
+const rawDatabaseUrl =
+  process.env.DATABASE_POOL_URL?.trim() || process.env.DATABASE_URL?.trim();
 const databaseUrl = rawDatabaseUrl
   ? rawDatabaseUrl.replace(/([?&])sslmode=[^&]*/g, (_, sep) => sep === "?" ? "?" : "").replace(/\?$/, "")
   : rawDatabaseUrl;
@@ -109,11 +117,15 @@ export const pool = new pg.Pool({
     : {}),
   max: DB_POOL_MAX,
   connectionTimeoutMillis: DB_CONNECTION_TIMEOUT_MS,
-  idleTimeoutMillis: 30000,
+  idleTimeoutMillis: DB_IDLE_TIMEOUT_MS,
   query_timeout: DB_QUERY_TIMEOUT_MS,
   keepAlive: true,
   allowExitOnIdle: true,
 });
+
+if (process.env.VERCEL) {
+  attachDatabasePool(pool);
+}
 
 pool.on("error", (error) => {
   console.error("Unexpected PostgreSQL pool error:", error);
@@ -196,7 +208,9 @@ function logDatabaseUnavailable(context: string, error: unknown) {
 
 async function ensureDatabaseAvailable(context: string) {
   if (!databaseUrl) {
-    throw new DbUnavailableError("DATABASE_URL is not configured.");
+    throw new DbUnavailableError(
+      "DATABASE_POOL_URL or DATABASE_URL is not configured."
+    );
   }
 
   if (Date.now() < dbFailureState.unavailableUntil) {
