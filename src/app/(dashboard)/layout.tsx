@@ -15,6 +15,7 @@ import {
   LogOut,
   Activity,
   Mail,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const navItems = [
   { label: "Users", href: "/users", icon: Users },
   { label: "Content", href: "/content", icon: FileText },
   { label: "Brevo", href: "/brevo", icon: Mail },
+  { label: "Ads", href: "/ads", icon: Megaphone },
   { label: "User Activity", href: "/user-activity", icon: Activity },
   { label: "Funnels", href: "/funnels", icon: Filter },
   { label: "System", href: "/system", icon: Settings },
