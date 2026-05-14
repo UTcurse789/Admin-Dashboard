@@ -1,4 +1,4 @@
-import { getAdByDocumentId } from "@/lib/ads";
+import { getAdByDocumentId, getAdTrackingData } from "@/lib/ads";
 import { notFound } from "next/navigation";
 import { AdDetailClient } from "./AdDetailClient";
 
@@ -13,7 +13,10 @@ interface PageProps {
 
 export default async function AdDetailPage({ params }: PageProps) {
   const { documentId } = await params;
-  const ad = await getAdByDocumentId(documentId);
+  const [ad, tracking] = await Promise.all([
+    getAdByDocumentId(documentId),
+    getAdTrackingData(documentId),
+  ]);
   if (!ad) notFound();
-  return <AdDetailClient ad={ad} />;
+  return <AdDetailClient ad={ad} tracking={tracking} />;
 }

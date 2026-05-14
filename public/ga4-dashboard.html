@@ -1,0 +1,4274 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Energdive GA4 Page Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #060e1c;
+      --panel: rgba(10, 22, 40, 0.94);
+      --panel-2: rgba(13, 28, 52, 0.97);
+      --panel-3: rgba(16, 36, 64, 0.97);
+      --line: rgba(110, 140, 190, 0.15);
+      --line-strong: rgba(110, 140, 190, 0.26);
+      --text: #eaf2ff;
+      --muted: #8aa4c2;
+      --soft: #4e6a8a;
+      --blue: #4f8cff;
+      --blue-2: #7eb0ff;
+      --blue-3: #b3d0ff;
+      --purple: #8768ff;
+      --purple-2: #a88bff;
+      --cyan: #17c6ef;
+      --cyan-2: #5dd8f5;
+      --green: #24d17f;
+      --green-2: #62e4a8;
+      --amber: #f7b84b;
+      --amber-2: #fad07a;
+      --rose: #ff7d9c;
+      --rose-2: #ffb3c4;
+      --shadow: 0 24px 72px rgba(1, 6, 16, 0.52), 0 4px 16px rgba(1, 6, 16, 0.28);
+      --shadow-sm: 0 8px 24px rgba(1, 6, 16, 0.36);
+      --sidebar-width: 288px;
+      --radius: 24px;
+      --radius-sm: 16px;
+      --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+      background:
+        radial-gradient(ellipse 80% 50% at 10% 0%, rgba(79, 140, 255, 0.14), transparent),
+        radial-gradient(ellipse 60% 40% at 90% 0%, rgba(135, 104, 255, 0.12), transparent),
+        radial-gradient(ellipse 50% 60% at 50% 100%, rgba(23, 198, 239, 0.06), transparent),
+        linear-gradient(160deg, #060e1c 0%, #07121f 50%, #060d1b 100%);
+      color: var(--text);
+    }
+
+    body.sidebar-open {
+      overflow: hidden;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: flex;
+    }
+
+    .sidebar {
+      width: var(--sidebar-width);
+      flex: 0 0 var(--sidebar-width);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding: 22px 18px;
+      background:
+        radial-gradient(ellipse 120% 40% at 50% 0%, rgba(79, 140, 255, 0.08), transparent),
+        linear-gradient(180deg, rgba(10, 22, 42, 0.99) 0%, rgba(7, 17, 32, 0.99) 100%);
+      border-right: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: hidden;
+      backdrop-filter: blur(20px) saturate(1.4);
+      z-index: 20;
+    }
+
+    .sidebar-header {
+      display: grid;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(145deg, rgba(79, 140, 255, 0.38), rgba(135, 104, 255, 0.30));
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+        0 0 20px rgba(79, 140, 255, 0.22),
+        0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .brand-bars {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 18px;
+    }
+
+    .brand-bars span {
+      width: 5px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--blue), var(--purple));
+    }
+
+    .brand-bars span:nth-child(1) {
+      height: 8px;
+    }
+
+    .brand-bars span:nth-child(2) {
+      height: 14px;
+    }
+
+    .brand-bars span:nth-child(3) {
+      height: 18px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand p,
+    .sidebar-note,
+    .sidebar-meta,
+    .muted {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .ghost-btn,
+    .icon-btn,
+    .pill-btn,
+    .primary-btn,
+    .danger-btn,
+    .secondary-btn {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      transition:
+        border-color var(--transition),
+        transform var(--transition),
+        background var(--transition),
+        box-shadow var(--transition),
+        opacity var(--transition);
+    }
+
+    .ghost-btn:hover,
+    .icon-btn:hover,
+    .pill-btn:hover,
+    .primary-btn:hover,
+    .danger-btn:hover,
+    .secondary-btn:hover {
+      border-color: rgba(79, 140, 255, 0.28);
+      background: rgba(79, 140, 255, 0.06);
+      box-shadow: 0 0 0 1px rgba(79, 140, 255, 0.08);
+    }
+
+    .ghost-btn:active,
+    .icon-btn:active,
+    .pill-btn:active,
+    .primary-btn:active,
+    .danger-btn:active,
+    .secondary-btn:active {
+      transform: translateY(1px);
+      box-shadow: none;
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+    }
+
+    .icon {
+      width: 16px;
+      height: 16px;
+      display: inline-block;
+      position: relative;
+    }
+
+    .icon.gear::before,
+    .icon.gear::after,
+    .icon.menu::before,
+    .icon.menu::after,
+    .icon.menu span,
+    .icon.refresh::before,
+    .icon.refresh::after,
+    .icon.download::before,
+    .icon.download::after,
+    .icon.search::before,
+    .icon.search::after,
+    .icon.close::before,
+    .icon.close::after {
+      content: "";
+      position: absolute;
+      display: block;
+    }
+
+    .icon.gear {
+      border: 2px solid var(--text);
+      border-radius: 50%;
+      opacity: 0.86;
+    }
+
+    .icon.gear::before {
+      inset: 4px;
+      border: 2px solid transparent;
+      border-top-color: var(--text);
+      border-bottom-color: var(--text);
+      border-radius: 50%;
+    }
+
+    .icon.gear::after {
+      inset: -2px;
+      border: 2px dashed rgba(236, 244, 255, 0.7);
+      border-radius: 50%;
+    }
+
+    .icon.menu::before,
+    .icon.menu::after,
+    .icon.menu span {
+      left: 0;
+      right: 0;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--text);
+    }
+
+    .icon.menu::before {
+      top: 2px;
+    }
+
+    .icon.menu span {
+      top: 7px;
+    }
+
+    .icon.menu::after {
+      top: 12px;
+    }
+
+    .icon.refresh {
+      border: 2px solid rgba(236, 244, 255, 0.7);
+      border-right-color: transparent;
+      border-radius: 50%;
+    }
+
+    .icon.refresh::before {
+      right: -1px;
+      top: -1px;
+      width: 0;
+      height: 0;
+      border-left: 5px solid var(--text);
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      transform: rotate(20deg);
+    }
+
+    .icon.download::before {
+      left: 7px;
+      top: 0;
+      width: 2px;
+      height: 10px;
+      background: var(--text);
+    }
+
+    .icon.download::after {
+      left: 3px;
+      top: 8px;
+      width: 8px;
+      height: 8px;
+      border-left: 2px solid var(--text);
+      border-bottom: 2px solid var(--text);
+      transform: rotate(-45deg);
+    }
+
+    .icon.search::before {
+      left: 0;
+      top: 0;
+      width: 10px;
+      height: 10px;
+      border: 2px solid rgba(236, 244, 255, 0.7);
+      border-radius: 50%;
+    }
+
+    .icon.search::after {
+      right: 0;
+      bottom: 0;
+      width: 7px;
+      height: 2px;
+      background: rgba(236, 244, 255, 0.7);
+      transform: rotate(45deg);
+      transform-origin: right center;
+    }
+
+    .icon.close::before,
+    .icon.close::after {
+      inset: 7px 0;
+      height: 2px;
+      background: var(--text);
+      border-radius: 999px;
+    }
+
+    .icon.close::before {
+      transform: rotate(45deg);
+    }
+
+    .icon.close::after {
+      transform: rotate(-45deg);
+    }
+
+    .sidebar-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 15px;
+      border-radius: 16px;
+      background:
+        linear-gradient(135deg, rgba(79, 140, 255, 0.1), rgba(135, 104, 255, 0.06));
+      border: 1px solid rgba(79, 140, 255, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .status-dot,
+    .live-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--soft);
+      box-shadow: 0 0 0 0 rgba(36, 209, 127, 0);
+    }
+
+    .status-dot.connected,
+    .live-dot.live {
+      background: var(--green);
+      box-shadow: 0 0 0 0 rgba(36, 209, 127, 0.42);
+      animation: pulse 1.8s infinite;
+    }
+
+    .status-dot.loading {
+      background: var(--amber);
+    }
+
+    .status-dot.error {
+      background: var(--rose);
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(36, 209, 127, 0.42);
+      }
+
+      70% {
+        box-shadow: 0 0 0 10px rgba(36, 209, 127, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(36, 209, 127, 0);
+      }
+    }
+
+    .search-wrap {
+      position: relative;
+    }
+
+    .search-wrap .icon {
+      position: absolute;
+      left: 14px;
+      top: 13px;
+    }
+
+    .search-input,
+    .date-input,
+    .modal-input,
+    .modal-textarea {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      padding: 12px 14px;
+      outline: none;
+    }
+
+    .search-input {
+      padding-left: 40px;
+    }
+
+    .search-input:focus,
+    .date-input:focus,
+    .modal-input:focus,
+    .modal-textarea:focus {
+      border-color: rgba(79, 140, 255, 0.5);
+      box-shadow: 0 0 0 4px rgba(79, 140, 255, 0.12);
+    }
+
+    .sidebar-meta {
+      font-size: 0.82rem;
+      line-height: 1.55;
+    }
+
+    .sidebar-pages {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .sidebar-pages-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .sidebar-pages-header h2 {
+      margin: 0;
+      font-size: 0.96rem;
+    }
+
+    .page-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .page-list::-webkit-scrollbar,
+    .main::-webkit-scrollbar,
+    .modal-textarea::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .page-list::-webkit-scrollbar-thumb,
+    .main::-webkit-scrollbar-thumb,
+    .modal-textarea::-webkit-scrollbar-thumb {
+      background: rgba(125, 154, 196, 0.22);
+      border-radius: 999px;
+    }
+
+    .page-item {
+      width: 100%;
+      text-align: left;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 12px 12px 12px 14px;
+      display: grid;
+      gap: 8px;
+      transition:
+        border-color var(--transition),
+        background var(--transition),
+        box-shadow var(--transition),
+        transform var(--transition);
+    }
+
+    .page-item:hover {
+      border-color: rgba(79, 140, 255, 0.18);
+      background: rgba(79, 140, 255, 0.04);
+      transform: translateX(2px);
+    }
+
+    .page-item.active {
+      background:
+        linear-gradient(135deg, rgba(79, 140, 255, 0.18), rgba(135, 104, 255, 0.12));
+      border-color: rgba(79, 140, 255, 0.32);
+      box-shadow:
+        inset 0 0 0 1px rgba(79, 140, 255, 0.1),
+        0 4px 20px rgba(79, 140, 255, 0.1);
+      transform: translateX(3px);
+    }
+
+    .page-item-top,
+    .page-item-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .page-path {
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      word-break: break-word;
+    }
+
+    .page-title {
+      font-size: 0.78rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .page-metric {
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .page-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .main {
+      flex: 1;
+      min-width: 0;
+      padding: 22px;
+      overflow: auto;
+    }
+
+    .main-inner {
+      max-width: 1640px;
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .topbar,
+    .panel,
+    .metric-card,
+    .banner,
+    .table-card {
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.042) 0%, rgba(255, 255, 255, 0.018) 100%),
+        var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px) saturate(1.3);
+    }
+
+    .topbar {
+      border-radius: 28px;
+      padding: 24px;
+      display: grid;
+      gap: 20px;
+      border-color: rgba(110, 140, 190, 0.18);
+      background:
+        radial-gradient(ellipse 100% 60% at 50% 0%, rgba(79, 140, 255, 0.07), transparent),
+        linear-gradient(145deg, rgba(255, 255, 255, 0.042) 0%, rgba(255, 255, 255, 0.018) 100%),
+        var(--panel);
+    }
+
+    .topbar-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--blue-2);
+      font-size: 0.76rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    .headline {
+      margin: 0;
+      font-size: clamp(1.6rem, 2vw, 2.4rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .subhead {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 900px;
+      line-height: 1.6;
+    }
+
+    .meta-strip,
+    .quick-range-group,
+    .compare-controls,
+    .toolbar-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .meta-pill,
+    .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 0.84rem;
+    }
+
+    .meta-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .pill-btn {
+      min-height: 40px;
+      color: var(--muted);
+    }
+
+    .pill-btn.active {
+      color: var(--text);
+      border-color: rgba(79, 140, 255, 0.42);
+      background: linear-gradient(180deg, rgba(79, 140, 255, 0.18), rgba(135, 104, 255, 0.12));
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .control-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .toolbar-box {
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px;
+      display: grid;
+      gap: 14px;
+      min-width: min(100%, 540px);
+    }
+
+    .primary-btn,
+    .secondary-btn,
+    .danger-btn {
+      border-radius: 14px;
+      padding: 11px 15px;
+      min-height: 42px;
+    }
+
+    .primary-btn {
+      background: linear-gradient(180deg, rgba(79, 140, 255, 0.28), rgba(135, 104, 255, 0.18));
+      border-color: rgba(79, 140, 255, 0.42);
+    }
+
+    .danger-btn {
+      border-color: rgba(255, 125, 156, 0.3);
+      color: #ffd9e4;
+    }
+
+    .banner {
+      border-radius: 24px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .banner h3,
+    .panel h3,
+    .metric-card h3,
+    .table-card h3 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .banner p,
+    .panel p,
+    .metric-card p,
+    .table-card p,
+    .section-note,
+    .stat-note,
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.58;
+    }
+
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .metric-card {
+      border-radius: 24px;
+      padding: 20px;
+      min-height: 162px;
+      display: grid;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+      transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--card-accent, linear-gradient(90deg, var(--blue), var(--purple)));
+      opacity: 0.7;
+      border-radius: 24px 24px 0 0;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow), 0 0 30px rgba(79, 140, 255, 0.08);
+      border-color: rgba(79, 140, 255, 0.22);
+    }
+
+    .metric-card:nth-child(1) { --card-accent: linear-gradient(90deg, var(--blue), var(--cyan)); }
+    .metric-card:nth-child(2) { --card-accent: linear-gradient(90deg, var(--purple), var(--blue-2)); }
+    .metric-card:nth-child(3) { --card-accent: linear-gradient(90deg, var(--cyan), var(--green)); }
+    .metric-card:nth-child(4) { --card-accent: linear-gradient(90deg, var(--green), var(--cyan-2)); }
+    .metric-card:nth-child(5) { --card-accent: linear-gradient(90deg, var(--amber), var(--rose)); }
+    .metric-card:nth-child(6) { --card-accent: linear-gradient(90deg, var(--rose), var(--purple-2)); }
+
+    .metric-card .metric-kicker {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .metric-card .metric-value {
+      font-size: clamp(1.65rem, 2vw, 2.45rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+
+    .delta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-size: 0.78rem;
+    }
+
+    .delta.positive {
+      background: rgba(36, 209, 127, 0.11);
+      color: #9fe6bf;
+    }
+
+    .delta.negative {
+      background: rgba(255, 125, 156, 0.12);
+      color: #ffc2d0;
+    }
+
+    .delta.neutral {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+    }
+
+    .new-return-wrap {
+      display: grid;
+      gap: 10px;
+    }
+
+    .stack-bar {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+      display: flex;
+    }
+
+    .stack-bar span {
+      display: block;
+      height: 100%;
+    }
+
+    .stack-bar .new {
+      background: linear-gradient(90deg, var(--blue), var(--cyan));
+    }
+
+    .stack-bar .returning {
+      background: linear-gradient(90deg, var(--purple), #b37bff);
+    }
+
+    .pair-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .pair-metrics strong {
+      display: block;
+      font-size: 1.08rem;
+      letter-spacing: -0.03em;
+    }
+
+    .panel,
+    .table-card {
+      border-radius: 28px;
+      padding: 20px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .panel-head-left {
+      display: grid;
+      gap: 8px;
+    }
+
+    .panel-head-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stat-chip-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stat-chip {
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.035);
+      padding: 12px 14px;
+      min-width: 136px;
+    }
+
+    .stat-chip strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 1.18rem;
+      letter-spacing: -0.03em;
+    }
+
+    .journey-layout {
+      position: relative;
+      min-height: 420px;
+    }
+
+    .journey-grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+      z-index: 2;
+    }
+
+    .journey-column {
+      display: grid;
+      gap: 12px;
+    }
+
+    .journey-center {
+      display: grid;
+      align-content: center;
+      min-height: 360px;
+    }
+
+    .flow-node {
+      position: relative;
+      border-radius: 18px;
+      border: 1px solid rgba(79, 140, 255, 0.16);
+      background: rgba(255, 255, 255, 0.035);
+      padding: 14px 16px;
+      min-height: 72px;
+      overflow: hidden;
+    }
+
+    .flow-node::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: calc(var(--weight, 0.1) * 100%);
+      background: linear-gradient(90deg,
+          rgba(79, 140, 255, 0.18),
+          rgba(135, 104, 255, 0.12));
+      pointer-events: none;
+    }
+
+    .flow-node.central {
+      min-height: 200px;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      text-align: center;
+      background:
+        radial-gradient(circle at top center, rgba(79, 140, 255, 0.22), transparent 62%),
+        rgba(255, 255, 255, 0.035);
+      border-color: rgba(79, 140, 255, 0.28);
+    }
+
+    .flow-node strong {
+      display: block;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+      word-break: break-word;
+    }
+
+    .flow-node .flow-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 0.9rem;
+      color: var(--blue-2);
+    }
+
+    .flow-node small {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .journey-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .journey-legend {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .legend-tile {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px;
+    }
+
+    .legend-tile strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 1.24rem;
+      letter-spacing: -0.03em;
+    }
+
+    .chart-shell {
+      position: relative;
+      min-height: 340px;
+    }
+
+    .chart-shell.compact {
+      min-height: 280px;
+    }
+
+    .chart-shell canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .two-up {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+      gap: 18px;
+    }
+
+    .three-up {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+      gap: 18px;
+    }
+
+    .behavior-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .behavior-card {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 16px;
+    }
+
+    .behavior-card strong {
+      display: block;
+      margin-top: 10px;
+      font-size: 1.34rem;
+      letter-spacing: -0.03em;
+    }
+
+    .mini-note {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 11px 10px;
+      border-bottom: 1px solid rgba(125, 154, 196, 0.12);
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover td {
+      background: rgba(79, 140, 255, 0.04);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .empty-state,
+    .error-state {
+      border-radius: 24px;
+      border: 1px dashed rgba(125, 154, 196, 0.24);
+      background: rgba(255, 255, 255, 0.025);
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .error-state strong,
+    .empty-state strong {
+      display: block;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .skeleton-screen {
+      display: none;
+      gap: 14px;
+    }
+
+    .loading .skeleton-screen {
+      display: grid;
+    }
+
+    .loading .content-shell {
+      display: none;
+    }
+
+    .skeleton-row {
+      display: grid;
+      gap: 14px;
+    }
+
+    .skeleton-row.cards {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .skeleton-row.panels {
+      grid-template-columns: 1fr;
+    }
+
+    .skeleton {
+      position: relative;
+      overflow: hidden;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      min-height: 140px;
+    }
+
+    .skeleton::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg,
+          transparent 0%,
+          rgba(255, 255, 255, 0.08) 50%,
+          transparent 100%);
+      transform: translateX(-100%);
+      animation: shimmer 1.45s infinite;
+    }
+
+    .skeleton.tall {
+      min-height: 400px;
+    }
+
+    .skeleton.medium {
+      min-height: 320px;
+    }
+
+    @keyframes shimmer {
+      100% {
+        transform: translateX(100%);
+      }
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+      background: rgba(3, 8, 16, 0.72);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+
+    .modal.open {
+      display: flex;
+    }
+
+    .modal-card {
+      width: min(940px, 100%);
+      max-height: min(92vh, 980px);
+      overflow: auto;
+      border-radius: 32px;
+      padding: 28px;
+      background:
+        radial-gradient(ellipse 80% 40% at 70% 0%, rgba(79, 140, 255, 0.15), transparent),
+        radial-gradient(ellipse 60% 30% at 20% 100%, rgba(135, 104, 255, 0.1), transparent),
+        linear-gradient(160deg, rgba(11, 24, 44, 0.99), rgba(7, 17, 32, 0.99));
+      border: 1px solid rgba(79, 140, 255, 0.2);
+      box-shadow:
+        var(--shadow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    }
+
+    .modal-card form {
+      display: grid;
+      gap: 18px;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .modal-head h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: -0.04em;
+    }
+
+    .modal-copy {
+      color: var(--muted);
+      line-height: 1.65;
+      margin-top: 10px;
+    }
+
+    .modal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .modal-field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .modal-field.full {
+      grid-column: 1 / -1;
+    }
+
+    .modal-field label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .modal-textarea {
+      min-height: 280px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      line-height: 1.5;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+    }
+
+    .checkbox-row input {
+      width: 18px;
+      height: 18px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      min-width: 300px;
+      max-width: min(480px, calc(100vw - 40px));
+      border-radius: 20px;
+      border: 1px solid rgba(79, 140, 255, 0.22);
+      background:
+        linear-gradient(145deg, rgba(10, 22, 42, 0.98), rgba(7, 16, 32, 0.98));
+      padding: 16px 18px;
+      box-shadow:
+        var(--shadow),
+        0 0 0 1px rgba(79, 140, 255, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+      transform: translateY(32px) scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 240ms cubic-bezier(0.4, 0, 0.2, 1), transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 110;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .toast strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .toast p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .mobile-only {
+      display: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1280px) {
+      .overview-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .three-up,
+      .two-up {
+        grid-template-columns: 1fr;
+      }
+
+      .journey-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .journey-center {
+        min-height: unset;
+      }
+
+      .journey-layout {
+        min-height: unset;
+      }
+
+      .journey-svg {
+        display: none;
+      }
+
+      .journey-legend {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 960px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-102%);
+        transition: transform 180ms ease;
+        width: min(86vw, 340px);
+        height: 100vh;
+      }
+
+      body.sidebar-open .sidebar {
+        transform: translateX(0);
+      }
+
+      .mobile-only {
+        display: inline-flex;
+      }
+
+      .main {
+        padding: 14px;
+      }
+
+      .topbar,
+      .panel,
+      .table-card,
+      .banner {
+        border-radius: 24px;
+      }
+
+      .overview-grid,
+      .skeleton-row.cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .control-grid,
+      .modal-grid,
+      .behavior-grid,
+      .pair-metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+
+      .overview-grid,
+      .skeleton-row.cards {
+        grid-template-columns: 1fr;
+      }
+
+      .headline {
+        font-size: 1.5rem;
+      }
+
+      .main {
+        padding: 12px;
+      }
+
+      .topbar,
+      .panel,
+      .table-card,
+      .metric-card,
+      .banner {
+        padding: 16px;
+      }
+    }
+    /* ── Final polish layer ───────────────────────────────── */
+
+    /* Active pill glow */
+    .pill-btn.active {
+      color: var(--text);
+      border-color: rgba(79, 140, 255, 0.48);
+      background: linear-gradient(135deg, rgba(79, 140, 255, 0.22), rgba(135, 104, 255, 0.15));
+      box-shadow: 0 0 12px rgba(79, 140, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Primary button glow */
+    .primary-btn {
+      background: linear-gradient(135deg, rgba(79, 140, 255, 0.32), rgba(135, 104, 255, 0.22));
+      border-color: rgba(79, 140, 255, 0.5);
+      box-shadow: 0 0 16px rgba(79, 140, 255, 0.14);
+    }
+    .primary-btn:hover {
+      background: linear-gradient(135deg, rgba(79, 140, 255, 0.42), rgba(135, 104, 255, 0.30));
+      box-shadow: 0 0 24px rgba(79, 140, 255, 0.22);
+    }
+
+    /* Panel hover lift */
+    .panel, .table-card {
+      transition: transform var(--transition), box-shadow var(--transition);
+    }
+
+    /* Chart shell header accent line */
+    .panel-head {
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    /* Behavior cards enhancement */
+    .behavior-card {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.025);
+      padding: 16px;
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .behavior-card:hover {
+      border-color: rgba(79, 140, 255, 0.2);
+      background: rgba(79, 140, 255, 0.04);
+    }
+
+    /* Stat chip hover */
+    .stat-chip {
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .stat-chip:hover {
+      border-color: rgba(79, 140, 255, 0.22);
+      background: rgba(79, 140, 255, 0.06);
+    }
+
+    /* Refined empty/error states */
+    .empty-state, .error-state {
+      border-radius: 20px;
+      border: 1px dashed rgba(79, 140, 255, 0.18);
+      background: rgba(79, 140, 255, 0.025);
+      padding: 32px 28px;
+    }
+
+    /* Premium scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(79, 140, 255, 0.2);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(79, 140, 255, 0.38);
+    }
+
+    /* Smoother shimmer */
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .skeleton::after {
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(79, 140, 255, 0.07) 40%,
+        rgba(135, 104, 255, 0.06) 60%,
+        transparent 100%
+      );
+      animation: shimmer 1.8s ease-in-out infinite;
+    }
+
+    /* Meta pill refinement */
+    .meta-pill {
+      background: rgba(79, 140, 255, 0.06);
+      border: 1px solid rgba(79, 140, 255, 0.15);
+      color: var(--blue-3);
+      font-weight: 500;
+    }
+
+    /* Banner refinement */
+    .banner {
+      border-radius: 20px;
+      background:
+        linear-gradient(135deg, rgba(247, 184, 75, 0.08), rgba(255, 125, 156, 0.04));
+      border-color: rgba(247, 184, 75, 0.2);
+    }
+
+    /* Control label refinement */
+    .control-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--blue-2);
+      margin-bottom: 8px;
+    }
+
+    /* Toolbar box refinement */
+    .toolbar-box {
+      border-radius: 20px;
+      border: 1px solid rgba(79, 140, 255, 0.15);
+      background:
+        linear-gradient(145deg, rgba(79, 140, 255, 0.04), rgba(255, 255, 255, 0.02));
+    }
+
+    /* Modal open animation */
+    .modal.open {
+      animation: modalFadeIn 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .modal.open .modal-card {
+      animation: modalSlideIn 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes modalSlideIn {
+      from { transform: scale(0.94) translateY(16px); opacity: 0; }
+      to { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    /* Search input focus ring */
+    .search-input:focus {
+      border-color: rgba(79, 140, 255, 0.45);
+      box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.12);
+    }
+
+    /* Page path font refinement */
+    .page-path {
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      font-size: 0.88rem;
+    }
+
+    /* Metric value refinement */
+    .metric-card .metric-value {
+      font-size: clamp(1.7rem, 2.2vw, 2.5rem);
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+
+    /* Headline refinement */
+    .headline {
+      margin: 0;
+      font-size: clamp(1.6rem, 2vw, 2.5rem);
+      line-height: 1.05;
+      letter-spacing: -0.045em;
+      font-weight: 800;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true">
+              <div class="brand-bars"><span></span><span></span><span></span></div>
+            </div>
+            <div>
+              <h1>GA4 Page Intelligence</h1>
+              <p class="sidebar-note">Energdive property explorer</p>
+            </div>
+          </div>
+          <button class="icon-btn" id="sidebarSettingsBtn" type="button" title="Settings">
+            <span class="icon gear" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div class="sidebar-status">
+          <span class="status-dot" id="statusDot"></span>
+          <div>
+            <strong id="statusLabel">Awaiting credentials</strong>
+            <p class="sidebar-meta" id="statusMeta">Paste a service-account JSON to connect.</p>
+          </div>
+        </div>
+
+        <div class="search-wrap">
+          <span class="icon search" aria-hidden="true"></span>
+          <input class="search-input" id="pageSearch" type="search" placeholder="Search any page path or title"
+            autocomplete="off" />
+        </div>
+
+        <p class="sidebar-meta" id="pageSummary">
+          All pages appear here. Session badges follow the currently selected date range. Live dots are best-effort
+          title matches from the GA4 Realtime API.
+        </p>
+      </div>
+
+      <section class="sidebar-pages">
+        <div class="sidebar-pages-header">
+          <div>
+            <h2>Pages</h2>
+            <p class="sidebar-meta" id="sidebarRangeLabel">All time</p>
+          </div>
+          <span class="badge" id="pageCountBadge">0 pages</span>
+        </div>
+        <div class="page-list" id="pageList">
+          <div class="empty-state">
+            <strong>No pages loaded yet</strong>
+            Connect the GA4 property to populate the page catalog.
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="main">
+      <div class="main-inner" id="appRoot">
+        <section class="topbar">
+          <div class="topbar-row">
+            <div>
+              <p class="eyebrow">Page Intelligence</p>
+              <h2 class="headline" id="selectedPageHeadline">Choose a page</h2>
+              <p class="subhead" id="selectedPageSubhead">
+                Connect the GA4 property, then select any page from the left rail to load a full page-level report.
+              </p>
+            </div>
+            <button class="icon-btn mobile-only" id="mobileMenuBtn" type="button" title="Open pages">
+              <span class="icon menu"><span></span></span>
+            </button>
+          </div>
+
+          <div class="topbar-row">
+            <div class="meta-strip">
+              <span class="meta-pill" id="propertyBadge">Property 512274060</span>
+              <span class="meta-pill" id="rangeBadge">Date range not set</span>
+              <span class="meta-pill" id="compareBadge">Compare off</span>
+            </div>
+
+            <div class="toolbar-box">
+              <div>
+                <div class="control-label">Quick range</div>
+                <div class="quick-range-group">
+                  <button class="pill-btn" type="button" data-range="today">Today</button>
+                  <button class="pill-btn" type="button" data-range="7d">7 days</button>
+                  <button class="pill-btn" type="button" data-range="30d">30 days</button>
+                  <button class="pill-btn" type="button" data-range="90d">90 days</button>
+                  <button class="pill-btn active" type="button" data-range="all">All time</button>
+                </div>
+              </div>
+
+              <div class="control-grid">
+                <div>
+                  <div class="control-label">Primary range</div>
+                  <div class="compare-controls">
+                    <input class="date-input" id="primaryStart" type="date" />
+                    <input class="date-input" id="primaryEnd" type="date" />
+                  </div>
+                </div>
+                <div id="compareInputsWrap">
+                  <div class="control-label">Compare range</div>
+                  <div class="compare-controls">
+                    <input class="date-input" id="compareStart" type="date" disabled />
+                    <input class="date-input" id="compareEnd" type="date" disabled />
+                  </div>
+                </div>
+              </div>
+
+              <div class="toolbar-actions">
+                <button class="secondary-btn" id="applyRangeBtn" type="button">Apply range</button>
+                <button class="pill-btn" id="toggleCompareBtn" type="button">Enable compare</button>
+                <button class="secondary-btn" id="refreshBtn" type="button">
+                  <span class="icon refresh" aria-hidden="true"></span>
+                  Refresh
+                </button>
+                <button class="secondary-btn" id="exportBtn" type="button">
+                  <span class="icon download" aria-hidden="true"></span>
+                  Export CSV
+                </button>
+                <button class="secondary-btn" id="openSettingsBtn" type="button">
+                  <span class="icon gear" aria-hidden="true"></span>
+                  Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="banner" id="securityBanner">
+          <div>
+            <h3>Direct browser auth is powerful, but not public-safe</h3>
+            <p>
+              This dashboard signs a service-account JWT in the browser and requests GA4 data directly. That matches
+              your requirement, but it also exposes the private key to anyone with browser access. Treat this as an
+              internal or tightly controlled tool.
+            </p>
+          </div>
+          <button class="icon-btn" id="dismissBannerBtn" type="button" title="Dismiss banner">
+            <span class="icon close" aria-hidden="true"></span>
+          </button>
+        </section>
+
+        <div id="dashboardWrap" class="loading">
+          <div class="skeleton-screen">
+            <div class="skeleton-row cards">
+              <div class="skeleton"></div>
+              <div class="skeleton"></div>
+              <div class="skeleton"></div>
+              <div class="skeleton"></div>
+              <div class="skeleton"></div>
+              <div class="skeleton"></div>
+            </div>
+            <div class="skeleton-row panels">
+              <div class="skeleton tall"></div>
+              <div class="skeleton medium"></div>
+              <div class="skeleton medium"></div>
+            </div>
+          </div>
+
+          <div class="content-shell">
+            <section class="overview-grid" id="overviewGrid">
+              <article class="metric-card">
+                <div class="metric-kicker"><span>Total Sessions</span></div>
+                <div class="metric-value">—</div>
+              </article>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div class="panel-head-left">
+                  <h3>User Journey Flow</h3>
+                  <p class="section-note">
+                    Previous and next page paths are derived from GA4 `pageReferrer` relationships. This reproduces path
+                    logic closely, but it is still an API-side approximation of the Exploration UI.
+                  </p>
+                </div>
+                <div class="panel-head-right">
+                  <span class="badge" id="journeyModeBadge">Awaiting data</span>
+                </div>
+              </div>
+              <div class="journey-legend" id="journeyLegend"></div>
+              <div class="journey-layout" id="journeyFlow"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div class="panel-head-left">
+                  <h3>Day-wise Sessions Timeline</h3>
+                  <p class="section-note">
+                    Daily session trend for the selected page, with weekends shaded and a linear trend line layered on
+                    top.
+                  </p>
+                </div>
+                <div class="panel-head-right">
+                  <span class="badge" id="timelineSummary">—</span>
+                </div>
+              </div>
+              <div class="chart-shell">
+                <canvas id="timelineChart"></canvas>
+              </div>
+            </section>
+
+            <section class="two-up">
+              <section class="panel">
+                <div class="panel-head">
+                  <div class="panel-head-left">
+                    <h3>Traffic Sources Breakdown</h3>
+                    <p class="section-note">
+                      Session-level channels mapped into Organic, Direct, Referral, Social, Email, Paid, and Other.
+                    </p>
+                  </div>
+                </div>
+                <div class="chart-shell compact">
+                  <canvas id="trafficChart"></canvas>
+                </div>
+                <div id="trafficTableWrap"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div class="panel-head-left">
+                    <h3>User Behavior On This Page</h3>
+                    <p class="section-note">
+                      Engagement metrics combined with flow-derived exit logic and landing-page entrances.
+                    </p>
+                  </div>
+                </div>
+                <div class="behavior-grid" id="behaviorGrid"></div>
+              </section>
+            </section>
+
+            <section class="three-up">
+              <section class="panel">
+                <div class="panel-head">
+                  <div class="panel-head-left">
+                    <h3>Device Mix</h3>
+                    <p class="section-note">User split by device category for the selected page.</p>
+                  </div>
+                </div>
+                <div class="chart-shell compact">
+                  <canvas id="deviceChart"></canvas>
+                </div>
+                <div id="deviceTableWrap"></div>
+              </section>
+
+              <section class="table-card">
+                <div class="panel-head">
+                  <div class="panel-head-left">
+                    <h3>Top Countries</h3>
+                    <p class="section-note">Highest-volume geographies for this page.</p>
+                  </div>
+                </div>
+                <div id="countryTableWrap"></div>
+              </section>
+
+              <section class="table-card">
+                <div class="panel-head">
+                  <div class="panel-head-left">
+                    <h3>Realtime</h3>
+                    <p class="section-note">
+                      Auto-refreshes every 30 seconds. GA4 Realtime does not expose page-path referrers, so live details
+                      use page-title matching plus country and device splits.
+                    </p>
+                  </div>
+                  <div class="panel-head-right">
+                    <span class="badge" id="realtimeClock">Live refresh off</span>
+                  </div>
+                </div>
+                <div class="stat-chip-row" id="realtimeSummary"></div>
+                <div id="realtimeTableWrap"></div>
+              </section>
+            </section>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="settingsModal" aria-hidden="true">
+    <div class="modal-card">
+      <form id="settingsForm">
+        <div class="modal-head">
+          <div>
+            <h2>Connect the GA4 Data API</h2>
+            <p class="modal-copy">
+              Paste a Google service-account JSON key, confirm the GA4 property ID, then connect. The property must
+              explicitly grant this service account access inside GA4 Admin. If you enable local storage, the
+              credentials stay on this browser only.
+            </p>
+          </div>
+          <button class="icon-btn" type="button" id="closeSettingsBtn" title="Close">
+            <span class="icon close" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div class="modal-grid">
+          <div class="modal-field">
+            <label for="propertyIdInput">Property ID</label>
+            <input class="modal-input" id="propertyIdInput" type="text" value="512274060" />
+          </div>
+          <div class="modal-field">
+            <label for="serviceAccountEmail">Service account email preview</label>
+            <input class="modal-input" id="serviceAccountEmail" type="text" value="Not loaded yet" readonly />
+          </div>
+          <div class="modal-field full">
+            <label for="credentialsInput">Service account JSON</label>
+            <textarea class="modal-textarea" id="credentialsInput" spellcheck="false" placeholder='{
+  "type": "service_account",
+  "project_id": "...",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+  "client_email": "...",
+  "token_uri": "https://oauth2.googleapis.com/token"
+}'></textarea>
+          </div>
+        </div>
+
+        <label class="checkbox-row">
+          <input id="rememberCredentials" type="checkbox" />
+          Remember this property and JSON in local storage on this browser
+        </label>
+
+        <div class="banner">
+          <div>
+            <h3>Important</h3>
+            <p>
+              Service-account private keys are sensitive. This pattern is intentionally client-side because you asked
+              for direct browser fetches, but it should be limited to private admin usage.
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <div class="toolbar-actions">
+            <button class="danger-btn" type="button" id="clearStoredBtn">Clear stored credentials</button>
+          </div>
+          <div class="toolbar-actions">
+            <button class="secondary-btn" type="button" id="cancelSettingsBtn">Cancel</button>
+            <button class="primary-btn" type="submit" id="connectBtn">Connect dashboard</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">
+    <strong id="toastTitle"></strong>
+    <p id="toastMessage"></p>
+  </div>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "ga4-dashboard-settings-v1";
+      const BANNER_KEY = "ga4-dashboard-banner-dismissed";
+      const CHART_COLORS = {
+        blue: "#4f8cff",
+        blue2: "#79a8ff",
+        cyan: "#17c6ef",
+        purple: "#8768ff",
+        purple2: "#b37bff",
+        green: "#24d17f",
+        amber: "#f7b84b",
+        rose: "#ff7d9c",
+        grey: "#95acc8",
+        grid: "rgba(125, 154, 196, 0.12)",
+      };
+
+      const state = {
+        credentials: null,
+        propertyId: "512274060",
+        cryptoKey: null,
+        token: null,
+        tokenExpiry: 0,
+        allTimeStart: null,
+        allPages: [],
+        pageStats: new Map(),
+        hostnames: [],
+        selectedPagePath: null,
+        currentRange: { start: null, end: null, label: "All time" },
+        compareRange: { start: null, end: null, label: "" },
+        compareEnabled: false,
+        dashboard: null,
+        charts: {},
+        realtimeTimer: null,
+        realtimeTitleMap: new Map(),
+        sidebarSearch: "",
+        isLoading: false,
+      };
+
+      const els = {
+        statusDot: document.getElementById("statusDot"),
+        statusLabel: document.getElementById("statusLabel"),
+        statusMeta: document.getElementById("statusMeta"),
+        pageSearch: document.getElementById("pageSearch"),
+        pageList: document.getElementById("pageList"),
+        pageCountBadge: document.getElementById("pageCountBadge"),
+        pageSummary: document.getElementById("pageSummary"),
+        sidebarRangeLabel: document.getElementById("sidebarRangeLabel"),
+        selectedPageHeadline: document.getElementById("selectedPageHeadline"),
+        selectedPageSubhead: document.getElementById("selectedPageSubhead"),
+        propertyBadge: document.getElementById("propertyBadge"),
+        rangeBadge: document.getElementById("rangeBadge"),
+        compareBadge: document.getElementById("compareBadge"),
+        primaryStart: document.getElementById("primaryStart"),
+        primaryEnd: document.getElementById("primaryEnd"),
+        compareStart: document.getElementById("compareStart"),
+        compareEnd: document.getElementById("compareEnd"),
+        compareInputsWrap: document.getElementById("compareInputsWrap"),
+        applyRangeBtn: document.getElementById("applyRangeBtn"),
+        toggleCompareBtn: document.getElementById("toggleCompareBtn"),
+        refreshBtn: document.getElementById("refreshBtn"),
+        exportBtn: document.getElementById("exportBtn"),
+        openSettingsBtn: document.getElementById("openSettingsBtn"),
+        sidebarSettingsBtn: document.getElementById("sidebarSettingsBtn"),
+        mobileMenuBtn: document.getElementById("mobileMenuBtn"),
+        dashboardWrap: document.getElementById("dashboardWrap"),
+        overviewGrid: document.getElementById("overviewGrid"),
+        journeyModeBadge: document.getElementById("journeyModeBadge"),
+        journeyLegend: document.getElementById("journeyLegend"),
+        journeyFlow: document.getElementById("journeyFlow"),
+        timelineSummary: document.getElementById("timelineSummary"),
+        trafficTableWrap: document.getElementById("trafficTableWrap"),
+        behaviorGrid: document.getElementById("behaviorGrid"),
+        deviceTableWrap: document.getElementById("deviceTableWrap"),
+        countryTableWrap: document.getElementById("countryTableWrap"),
+        realtimeSummary: document.getElementById("realtimeSummary"),
+        realtimeTableWrap: document.getElementById("realtimeTableWrap"),
+        realtimeClock: document.getElementById("realtimeClock"),
+        securityBanner: document.getElementById("securityBanner"),
+        dismissBannerBtn: document.getElementById("dismissBannerBtn"),
+        settingsModal: document.getElementById("settingsModal"),
+        settingsForm: document.getElementById("settingsForm"),
+        propertyIdInput: document.getElementById("propertyIdInput"),
+        serviceAccountEmail: document.getElementById("serviceAccountEmail"),
+        credentialsInput: document.getElementById("credentialsInput"),
+        rememberCredentials: document.getElementById("rememberCredentials"),
+        closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+        cancelSettingsBtn: document.getElementById("cancelSettingsBtn"),
+        clearStoredBtn: document.getElementById("clearStoredBtn"),
+        connectBtn: document.getElementById("connectBtn"),
+        toast: document.getElementById("toast"),
+        toastTitle: document.getElementById("toastTitle"),
+        toastMessage: document.getElementById("toastMessage"),
+        timelineChart: document.getElementById("timelineChart"),
+        trafficChart: document.getElementById("trafficChart"),
+        deviceChart: document.getElementById("deviceChart"),
+      };
+
+      const weekendPlugin = {
+        id: "weekendBackground",
+        beforeDatasetsDraw(chart, args, pluginOptions) {
+          if (!pluginOptions || !Array.isArray(pluginOptions.labels)) {
+            return;
+          }
+
+          const {
+            ctx,
+            chartArea,
+            scales: { x },
+          } = chart;
+
+          if (!chartArea || !x) {
+            return;
+          }
+
+          ctx.save();
+          pluginOptions.labels.forEach((label, index) => {
+            const day = new Date(label + "T00:00:00");
+            const weekday = day.getDay();
+            if (weekday !== 0 && weekday !== 6) {
+              return;
+            }
+
+            const current = x.getPixelForValue(index);
+            const previous = index === 0 ? chartArea.left : x.getPixelForValue(index - 1);
+            const next =
+              index === pluginOptions.labels.length - 1
+                ? chartArea.right
+                : x.getPixelForValue(index + 1);
+            const left = index === 0 ? current - (next - current) / 2 : (previous + current) / 2;
+            const right =
+              index === pluginOptions.labels.length - 1
+                ? current + (current - previous) / 2
+                : (current + next) / 2;
+
+            ctx.fillStyle = "rgba(135, 104, 255, 0.06)";
+            ctx.fillRect(left, chartArea.top, right - left, chartArea.bottom - chartArea.top);
+          });
+          ctx.restore();
+        },
+      };
+
+      Chart.register(weekendPlugin);
+
+      function qs(selector) {
+        return document.querySelector(selector);
+      }
+
+      function formatNumber(value) {
+        return Number(value || 0).toLocaleString("en-IN");
+      }
+
+      function formatCompact(value) {
+        return new Intl.NumberFormat("en-IN", {
+          notation: "compact",
+          maximumFractionDigits: 1,
+        }).format(Number(value || 0));
+      }
+
+      function formatPercent(value, digits = 1) {
+        const num = Number(value || 0) * 100;
+        return `${num.toFixed(digits)}%`;
+      }
+
+      function formatRatio(value, digits = 1) {
+        return `${Number(value || 0).toFixed(digits)}%`;
+      }
+
+      function formatDuration(seconds) {
+        const total = Math.max(0, Math.round(Number(seconds || 0)));
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const secs = total % 60;
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        }
+        if (minutes > 0) {
+          return `${minutes}m ${secs}s`;
+        }
+        return `${secs}s`;
+      }
+
+      function formatSignedDuration(seconds) {
+        const numeric = Number(seconds || 0);
+        const sign = numeric > 0 ? "+" : numeric < 0 ? "-" : "";
+        return `${sign}${formatDuration(Math.abs(numeric))}`;
+      }
+
+      function formatDateDisplay(iso) {
+        if (!iso) {
+          return "—";
+        }
+        return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        });
+      }
+
+      function formatDateShort(iso) {
+        if (!iso) {
+          return "—";
+        }
+        return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+        });
+      }
+
+      function getTodayIso() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+          now.getDate()
+        ).padStart(2, "0")}`;
+      }
+
+      function shiftIsoDate(iso, days) {
+        const date = new Date(iso + "T00:00:00");
+        date.setDate(date.getDate() + days);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+          date.getDate()
+        ).padStart(2, "0")}`;
+      }
+
+      function diffDaysInclusive(start, end) {
+        const startDate = new Date(start + "T00:00:00");
+        const endDate = new Date(end + "T00:00:00");
+        return Math.round((endDate - startDate) / 86400000) + 1;
+      }
+
+      function previousRangeFor(range) {
+        const span = diffDaysInclusive(range.start, range.end);
+        return {
+          start: shiftIsoDate(range.start, -span),
+          end: shiftIsoDate(range.start, -1),
+          label: `Compare ${formatDateShort(shiftIsoDate(range.start, -span))} - ${formatDateShort(
+            shiftIsoDate(range.start, -1)
+          )}`,
+        };
+      }
+
+      function formatRangeLabel(range) {
+        if (!range || !range.start || !range.end) {
+          return "Date range not set";
+        }
+        if (range.start === range.end) {
+          return formatDateDisplay(range.start);
+        }
+        return `${formatDateDisplay(range.start)} - ${formatDateDisplay(range.end)}`;
+      }
+
+      function gaDateToIso(value) {
+        if (!value || value.length !== 8) {
+          return value;
+        }
+        return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function escapeRegex(value) {
+        return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+
+      function toBase64Url(input) {
+        return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+      }
+
+      function arrayBufferToBase64Url(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        bytes.forEach((byte) => {
+          binary += String.fromCharCode(byte);
+        });
+        return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+      }
+
+      function pemToArrayBuffer(pem) {
+        const cleaned = pem
+          .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+          .replace(/-----END PRIVATE KEY-----/g, "")
+          .replace(/\s+/g, "");
+        const raw = atob(cleaned);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i += 1) {
+          bytes[i] = raw.charCodeAt(i);
+        }
+        return bytes.buffer;
+      }
+
+      function metricValue(row, index) {
+        return Number(row?.metricValues?.[index]?.value || 0);
+      }
+
+      function dimensionValue(row, index) {
+        return row?.dimensionValues?.[index]?.value || "";
+      }
+
+      function showToast(title, message) {
+        els.toastTitle.textContent = title;
+        els.toastMessage.textContent = message;
+        els.toast.classList.add("show");
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(() => {
+          els.toast.classList.remove("show");
+        }, 3200);
+      }
+
+      function setStatus(kind, label, meta) {
+        els.statusDot.className = `status-dot ${kind}`;
+        els.statusLabel.textContent = label;
+        els.statusMeta.textContent = meta;
+      }
+
+      function openSettingsModal() {
+        els.settingsModal.classList.add("open");
+        els.settingsModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeSettingsModal(force = false) {
+        if (!force && !state.credentials && !els.credentialsInput.value.trim()) {
+          return;
+        }
+        els.settingsModal.classList.remove("open");
+        els.settingsModal.setAttribute("aria-hidden", "true");
+      }
+
+      function setLoading(isLoading, metaText = "Loading report...") {
+        state.isLoading = isLoading;
+        els.dashboardWrap.classList.toggle("loading", isLoading);
+        if (isLoading) {
+          setStatus("loading", "Loading data", metaText);
+        }
+      }
+
+      function normalizeSourceBuckets(rows, totalSessions) {
+        const buckets = new Map([
+          ["Organic", 0],
+          ["Direct", 0],
+          ["Referral", 0],
+          ["Social", 0],
+          ["Email", 0],
+          ["Paid", 0],
+          ["Other", 0],
+        ]);
+
+        rows.forEach((item) => {
+          const label = item.label || "(not set)";
+          const value = item.value || 0;
+          const lower = label.toLowerCase();
+          let bucket = "Other";
+
+          if (lower.includes("organic search")) {
+            bucket = "Organic";
+          } else if (lower === "direct") {
+            bucket = "Direct";
+          } else if (lower.includes("referral") || lower.includes("affiliate")) {
+            bucket = "Referral";
+          } else if (lower.includes("social")) {
+            bucket = "Social";
+          } else if (lower.includes("email")) {
+            bucket = "Email";
+          } else if (
+            lower.includes("paid") ||
+            lower.includes("display") ||
+            lower.includes("cross-network") ||
+            lower.includes("shopping") ||
+            lower.includes("video")
+          ) {
+            bucket = "Paid";
+          }
+
+          buckets.set(bucket, (buckets.get(bucket) || 0) + value);
+        });
+
+        return Array.from(buckets.entries())
+          .map(([label, value]) => ({
+            label,
+            value,
+            share: totalSessions > 0 ? value / totalSessions : 0,
+          }))
+          .filter((item) => item.value > 0 || item.label !== "Other");
+      }
+
+      function makeTable(headers, rows, rightAlign = []) {
+        if (!rows.length) {
+          return `<div class="empty-state"><strong>No rows returned</strong>The selected page has no matching data for this range.</div>`;
+        }
+
+        const head = headers
+          .map((header, index) => `<th${rightAlign.includes(index) ? ' style="text-align:right"' : ""}>${escapeHtml(header)}</th>`)
+          .join("");
+
+        const body = rows
+          .map(
+            (row) =>
+              `<tr>${row
+                .map(
+                  (cell, index) =>
+                    `<td${rightAlign.includes(index) ? ' style="text-align:right"' : ""}>${cell}</td>`
+                )
+                .join("")}</tr>`
+          )
+          .join("");
+
+        return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+      }
+
+      async function importPrivateKey(pem) {
+        return window.crypto.subtle.importKey(
+          "pkcs8",
+          pemToArrayBuffer(pem),
+          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+          false,
+          ["sign"]
+        );
+      }
+
+      async function buildJwtAssertion() {
+        if (!state.credentials) {
+          throw new Error("Missing service account credentials.");
+        }
+
+        if (!state.cryptoKey) {
+          state.cryptoKey = await importPrivateKey(state.credentials.private_key);
+        }
+
+        const tokenUri = state.credentials.token_uri || "https://oauth2.googleapis.com/token";
+        const now = Math.floor(Date.now() / 1000);
+        const header = { alg: "RS256", typ: "JWT" };
+        const payload = {
+          iss: state.credentials.client_email,
+          scope: "https://www.googleapis.com/auth/analytics.readonly",
+          aud: tokenUri,
+          iat: now,
+          exp: now + 3600,
+        };
+
+        const unsigned = `${toBase64Url(JSON.stringify(header))}.${toBase64Url(JSON.stringify(payload))}`;
+        const signature = await window.crypto.subtle.sign(
+          { name: "RSASSA-PKCS1-v1_5" },
+          state.cryptoKey,
+          new TextEncoder().encode(unsigned)
+        );
+        return `${unsigned}.${arrayBufferToBase64Url(signature)}`;
+      }
+
+      async function getAccessToken(forceRefresh = false) {
+        const safetyWindow = 60 * 1000;
+        if (!forceRefresh && state.token && Date.now() < state.tokenExpiry - safetyWindow) {
+          return state.token;
+        }
+
+        const assertion = await buildJwtAssertion();
+        const body = new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+          assertion,
+        });
+
+        const response = await fetch(state.credentials.token_uri || "https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body,
+        });
+
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const message = json.error_description || json.error || "Could not request access token.";
+          throw new Error(message);
+        }
+
+        state.token = json.access_token;
+        state.tokenExpiry = Date.now() + Number(json.expires_in || 3600) * 1000;
+        return state.token;
+      }
+
+      async function gaRequest(action, payload, retry = true) {
+        const token = await getAccessToken();
+        const url = `https://analyticsdata.googleapis.com/v1beta/properties/${state.propertyId}:${action}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const json = await response.json().catch(() => ({}));
+        if (response.status === 401 && retry) {
+          state.token = null;
+          return gaRequest(action, payload, false);
+        }
+
+        if (!response.ok) {
+          const message =
+            json.error?.message ||
+            json.error?.details?.[0]?.message ||
+            "Google Analytics returned an error.";
+          throw new Error(message);
+        }
+
+        return json;
+      }
+
+      async function runReport(payload) {
+        return gaRequest("runReport", payload);
+      }
+
+      async function batchRunReports(requests) {
+        const BATCH_LIMIT = 5;
+        if (requests.length <= BATCH_LIMIT) {
+          return gaRequest("batchRunReports", { requests });
+        }
+        // Split into chunks of BATCH_LIMIT and run sequentially
+        const chunks = [];
+        for (let i = 0; i < requests.length; i += BATCH_LIMIT) {
+          chunks.push(requests.slice(i, i + BATCH_LIMIT));
+        }
+        const results = [];
+        for (const chunk of chunks) {
+          const res = await gaRequest("batchRunReports", { requests: chunk });
+          results.push(res);
+        }
+        // Merge all reports arrays into a single response
+        return {
+          ...results[0],
+          reports: results.flatMap((r) => r.reports || []),
+        };
+      }
+
+      async function runRealtimeReport(payload) {
+        return gaRequest("runRealtimeReport", payload);
+      }
+
+      async function runPaginatedReport(basePayload, pageSize = 10000) {
+        let offset = 0;
+        let aggregatedRows = [];
+        let firstResponse = null;
+        let rowCount = 0;
+
+        while (true) {
+          const response = await runReport({
+            ...basePayload,
+            limit: String(pageSize),
+            offset: String(offset),
+          });
+
+          if (!firstResponse) {
+            firstResponse = response;
+          }
+
+          const rows = response.rows || [];
+          rowCount = Number(response.rowCount || rowCount || rows.length);
+          aggregatedRows = aggregatedRows.concat(rows);
+
+          if (!rows.length || aggregatedRows.length >= rowCount) {
+            break;
+          }
+
+          offset += rows.length;
+        }
+
+        return {
+          ...firstResponse,
+          rowCount,
+          rows: aggregatedRows,
+        };
+      }
+
+      function buildDimensionFilter(fieldName, matchType, value, caseSensitive = false) {
+        return {
+          filter: {
+            fieldName,
+            stringFilter: {
+              matchType,
+              value,
+              caseSensitive,
+            },
+          },
+        };
+      }
+
+      function andFilters(filters) {
+        return {
+          andGroup: {
+            expressions: filters,
+          },
+        };
+      }
+
+      function currentPageFilter(path) {
+        return andFilters([
+          buildDimensionFilter("pagePath", "EXACT", path),
+        ]);
+      }
+
+      function pageViewPathFilter(path) {
+        return andFilters([
+          buildDimensionFilter("pagePath", "EXACT", path),
+          buildDimensionFilter("eventName", "EXACT", "page_view"),
+        ]);
+      }
+
+      function selectedPageReferrerRegex(path) {
+        const escapedPath = escapeRegex(path);
+        const hostPart =
+          state.hostnames.length > 0
+            ? `(?:${state.hostnames.map((hostname) => escapeRegex(hostname)).join("|")})`
+            : "[^/]+";
+        const normalizedPath = path === "/" ? "/" : escapedPath;
+        return `https?://${hostPart}${normalizedPath}(?:\\?.*)?$`;
+      }
+
+      function landingPageRegex(path) {
+        const escapedPath = escapeRegex(path);
+        return `^${path === "/" ? "/" : escapedPath}(?:\\?.*)?$`;
+      }
+
+      function parseCredentials(raw) {
+        const parsed = JSON.parse(raw);
+        const requiredFields = ["type", "private_key", "client_email", "token_uri"];
+        requiredFields.forEach((field) => {
+          if (!parsed[field]) {
+            throw new Error(`Missing "${field}" in service-account JSON.`);
+          }
+        });
+        if (parsed.type !== "service_account") {
+          throw new Error("The JSON must be a Google service_account key.");
+        }
+        return parsed;
+      }
+
+      function loadStoredSettings() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) {
+            return null;
+          }
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn("Could not parse stored settings:", error);
+          return null;
+        }
+      }
+
+      function saveSettingsLocally() {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            propertyId: state.propertyId,
+            credentials: state.credentials,
+          })
+        );
+      }
+
+      function clearStoredSettings() {
+        localStorage.removeItem(STORAGE_KEY);
+        showToast("Stored credentials cleared", "Local browser storage has been wiped for this dashboard.");
+      }
+
+      function hydrateSettingsForm(stored = null) {
+        const payload = stored || loadStoredSettings();
+        els.propertyIdInput.value = payload?.propertyId || state.propertyId || "512274060";
+        els.credentialsInput.value = payload?.credentials ? JSON.stringify(payload.credentials, null, 2) : "";
+        els.rememberCredentials.checked = Boolean(payload?.credentials);
+        els.serviceAccountEmail.value = payload?.credentials?.client_email || "Not loaded yet";
+      }
+
+      async function fetchAllTimeStart() {
+        const response = await runReport({
+          dateRanges: [{ startDate: "2015-08-14", endDate: "today" }],
+          dimensions: [{ name: "date" }],
+          metrics: [{ name: "screenPageViews" }],
+          orderBys: [{ dimension: { dimensionName: "date" }, desc: false }],
+          limit: "1",
+        });
+
+        const row = response.rows?.[0];
+        if (!row) {
+          throw new Error("This property returned no historical pageview data.");
+        }
+
+        return gaDateToIso(dimensionValue(row, 0));
+      }
+
+      async function fetchHostnames() {
+        const response = await runReport({
+          dateRanges: [{ startDate: state.allTimeStart, endDate: "today" }],
+          dimensions: [{ name: "hostName" }],
+          metrics: [{ name: "screenPageViews" }],
+          orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+          limit: "25",
+        });
+
+        const hostnames = (response.rows || [])
+          .map((row) => dimensionValue(row, 0))
+          .filter(Boolean);
+
+        return Array.from(new Set(hostnames));
+      }
+
+      function aggregatePages(responseRows) {
+        const pageMap = new Map();
+        responseRows.forEach((row) => {
+          const path = dimensionValue(row, 0) || "/";
+          const title = dimensionValue(row, 1) || path;
+          const sessions = metricValue(row, 0);
+          const views = metricValue(row, 1);
+          const users = metricValue(row, 2);
+
+          if (!pageMap.has(path)) {
+            pageMap.set(path, {
+              path,
+              title,
+              sessions,
+              views,
+              users,
+              titleViews: views,
+            });
+            return;
+          }
+
+          const current = pageMap.get(path);
+          current.sessions += sessions;
+          current.views += views;
+          current.users += users;
+          if (views >= current.titleViews) {
+            current.title = title;
+            current.titleViews = views;
+          }
+        });
+
+        return Array.from(pageMap.values());
+      }
+
+      async function fetchAllPagesCatalog() {
+        const response = await runPaginatedReport({
+          dateRanges: [{ startDate: state.allTimeStart, endDate: "today" }],
+          dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],
+          metrics: [{ name: "sessions" }, { name: "screenPageViews" }, { name: "totalUsers" }],
+          orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+        });
+
+        return aggregatePages(response.rows || [])
+          .filter((page) => page.path && page.path !== "(not set)")
+          .sort((a, b) => b.sessions - a.sessions || a.path.localeCompare(b.path));
+      }
+
+      async function fetchPageStatsForRange(range) {
+        const response = await runPaginatedReport({
+          dateRanges: [{ startDate: range.start, endDate: range.end }],
+          dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],
+          metrics: [{ name: "sessions" }, { name: "screenPageViews" }, { name: "totalUsers" }],
+          orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+        });
+
+        const pages = aggregatePages(response.rows || []);
+        return new Map(
+          pages.map((page) => [
+            page.path,
+            {
+              sessions: page.sessions,
+              views: page.views,
+              users: page.users,
+              title: page.title,
+            },
+          ])
+        );
+      }
+
+      function getSelectedPage() {
+        return state.allPages.find((page) => page.path === state.selectedPagePath) || state.allPages[0] || null;
+      }
+
+      function updateCompareInputs() {
+        els.compareInputsWrap.classList.toggle("hidden", !state.compareEnabled);
+        els.compareStart.disabled = !state.compareEnabled;
+        els.compareEnd.disabled = !state.compareEnabled;
+        els.compareBadge.textContent = state.compareEnabled
+          ? `Compare ${formatRangeLabel(state.compareRange)}`
+          : "Compare off";
+        els.toggleCompareBtn.textContent = state.compareEnabled ? "Disable compare" : "Enable compare";
+      }
+
+      function syncDateControls() {
+        els.primaryStart.value = state.currentRange.start || "";
+        els.primaryEnd.value = state.currentRange.end || "";
+        els.compareStart.value = state.compareRange.start || "";
+        els.compareEnd.value = state.compareRange.end || "";
+        els.rangeBadge.textContent = formatRangeLabel(state.currentRange);
+        els.sidebarRangeLabel.textContent = formatRangeLabel(state.currentRange);
+        updateCompareInputs();
+
+        const quickButtons = document.querySelectorAll("[data-range]");
+        quickButtons.forEach((button) => button.classList.remove("active"));
+
+        const today = getTodayIso();
+        const presets = {
+          today: { start: today, end: today },
+          "7d": { start: shiftIsoDate(today, -6), end: today },
+          "30d": { start: shiftIsoDate(today, -29), end: today },
+          "90d": { start: shiftIsoDate(today, -89), end: today },
+          all: { start: state.allTimeStart, end: today },
+        };
+
+        Object.entries(presets).forEach(([key, preset]) => {
+          if (preset.start === state.currentRange.start && preset.end === state.currentRange.end) {
+            qs(`[data-range="${key}"]`)?.classList.add("active");
+          }
+        });
+      }
+
+      function sortPagesForSidebar(pages) {
+        return [...pages].sort((a, b) => {
+          const aCurrent = state.pageStats.get(a.path)?.sessions || 0;
+          const bCurrent = state.pageStats.get(b.path)?.sessions || 0;
+          return bCurrent - aCurrent || b.sessions - a.sessions || a.path.localeCompare(b.path);
+        });
+      }
+
+      function renderSidebarPages() {
+        const search = state.sidebarSearch.trim().toLowerCase();
+        const pages = sortPagesForSidebar(state.allPages).filter((page) => {
+          if (!search) {
+            return true;
+          }
+          return page.path.toLowerCase().includes(search) || page.title.toLowerCase().includes(search);
+        });
+
+        els.pageCountBadge.textContent = `${formatNumber(state.allPages.length)} pages`;
+
+        if (!pages.length) {
+          els.pageList.innerHTML = `<div class="empty-state"><strong>No match found</strong>Try a different page search term.</div>`;
+          return;
+        }
+
+        els.pageList.innerHTML = pages
+          .map((page) => {
+            const currentStats = state.pageStats.get(page.path) || { sessions: 0, views: 0, users: 0 };
+            const liveUsers = state.realtimeTitleMap.get(page.title) || 0;
+            const isActive = state.selectedPagePath === page.path;
+            return `
+                <button class="page-item ${isActive ? "active" : ""}" type="button" data-page-path="${escapeHtml(page.path)}">
+                  <div class="page-item-top">
+                    <span class="page-path">${escapeHtml(page.path)}</span>
+                    <span class="page-metric">${formatCompact(currentStats.sessions)} sessions</span>
+                  </div>
+                  <div class="page-title" title="${escapeHtml(page.title)}">${escapeHtml(page.title)}</div>
+                  <div class="page-item-bottom">
+                    <span class="page-metric">${formatCompact(currentStats.views)} views · ${formatCompact(currentStats.users)} users</span>
+                    <span class="page-live">
+                      <span class="live-dot ${liveUsers > 0 ? "live" : ""}"></span>
+                      ${liveUsers > 0 ? `${formatCompact(liveUsers)} live` : "offline"}
+                    </span>
+                  </div>
+                </button>
+              `;
+          })
+          .join("");
+      }
+
+      function comparisonDelta(current, previous, mode = "count") {
+        if (previous == null) {
+          return { text: "Compare off", tone: "neutral" };
+        }
+
+        const currentValue = Number(current || 0);
+        const previousValue = Number(previous || 0);
+        const diff = currentValue - previousValue;
+
+        if (mode === "rate") {
+          const points = diff * 100;
+          return {
+            text: `${points > 0 ? "+" : ""}${points.toFixed(1)} pts`,
+            tone: diff > 0 ? "positive" : diff < 0 ? "negative" : "neutral",
+          };
+        }
+
+        if (mode === "duration") {
+          return {
+            text: formatSignedDuration(diff),
+            tone: diff > 0 ? "positive" : diff < 0 ? "negative" : "neutral",
+          };
+        }
+
+        if (previousValue === 0) {
+          return {
+            text: diff === 0 ? "0%" : "New data",
+            tone: diff === 0 ? "neutral" : "positive",
+          };
+        }
+
+        const percent = (diff / previousValue) * 100;
+        return {
+          text: `${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`,
+          tone: percent > 0 ? "positive" : percent < 0 ? "negative" : "neutral",
+        };
+      }
+
+      function renderOverviewCards() {
+        const current = state.dashboard?.current;
+        if (!current) {
+          return;
+        }
+
+        const compare = state.dashboard.compare?.overview || null;
+        const nvCompare = state.dashboard.compare?.newVsReturning || null;
+        const newShare = current.newVsReturning.newShare;
+        const returningShare = current.newVsReturning.returningShare;
+        const newShareDelta = state.compareEnabled
+          ? comparisonDelta(newShare, nvCompare?.newShare || 0, "rate")
+          : { text: "Compare off", tone: "neutral" };
+
+        const cards = [
+          {
+            label: "Total Sessions",
+            value: formatNumber(current.overview.sessions),
+            note: `${formatCompact(current.overview.sessions)} sessions in range`,
+            delta: comparisonDelta(current.overview.sessions, compare?.sessions),
+          },
+          {
+            label: "Total Users",
+            value: formatNumber(current.overview.totalUsers),
+            note: `${formatCompact(current.overview.totalUsers)} users reached this page`,
+            delta: comparisonDelta(current.overview.totalUsers, compare?.totalUsers),
+          },
+          {
+            label: "Avg Session Duration",
+            value: formatDuration(current.overview.averageSessionDuration),
+            note: "Average duration across sessions that included this page",
+            delta: comparisonDelta(
+              current.overview.averageSessionDuration,
+              compare?.averageSessionDuration,
+              "duration"
+            ),
+          },
+          {
+            label: "Bounce Rate",
+            value: formatPercent(current.overview.bounceRate),
+            note: "Share of sessions that bounced after including this page",
+            delta: comparisonDelta(current.overview.bounceRate, compare?.bounceRate, "rate"),
+          },
+          {
+            label: "Pageviews",
+            value: formatNumber(current.overview.pageViews),
+            note: `${formatCompact(current.overview.pageViews)} total views`,
+            delta: comparisonDelta(current.overview.pageViews, compare?.pageViews),
+          },
+        ];
+
+        const html = cards
+          .map((card) => {
+            const deltaText = state.compareEnabled
+              ? `<span class="delta ${card.delta.tone}">${escapeHtml(card.delta.text)}</span>`
+              : `<span class="delta neutral">Compare off</span>`;
+            return `
+                <article class="metric-card">
+                  <div class="metric-kicker"><span>${escapeHtml(card.label)}</span></div>
+                  <div class="metric-value">${escapeHtml(card.value)}</div>
+                  ${deltaText}
+                  <p class="stat-note">${escapeHtml(card.note)}</p>
+                </article>
+              `;
+          })
+          .join("");
+
+        const newReturning = `
+            <article class="metric-card">
+              <div class="metric-kicker"><span>New vs Returning</span></div>
+              <div class="new-return-wrap">
+                <div class="stack-bar" aria-hidden="true">
+                  <span class="new" style="width:${Math.max(newShare * 100, 4).toFixed(1)}%"></span>
+                  <span class="returning" style="width:${Math.max(returningShare * 100, 4).toFixed(1)}%"></span>
+                </div>
+                <div class="pair-metrics">
+                  <div>
+                    <span class="muted">New</span>
+                    <strong>${formatPercent(newShare)}</strong>
+                  </div>
+                  <div>
+                    <span class="muted">Returning</span>
+                    <strong>${formatPercent(returningShare)}</strong>
+                  </div>
+                </div>
+                <span class="delta ${state.compareEnabled ? newShareDelta.tone : "neutral"}">${escapeHtml(
+          state.compareEnabled ? newShareDelta.text : "Compare off"
+        )}</span>
+                <p class="stat-note">
+                  Based on the GA4 new-vs-returning user dimension for this page.
+                </p>
+              </div>
+            </article>
+          `;
+
+        els.overviewGrid.innerHTML = html + newReturning;
+      }
+
+      function computeTrend(values) {
+        if (!values.length) {
+          return [];
+        }
+
+        const n = values.length;
+        const xMean = (n - 1) / 2;
+        const yMean = values.reduce((sum, value) => sum + value, 0) / n;
+        let numerator = 0;
+        let denominator = 0;
+
+        values.forEach((value, index) => {
+          numerator += (index - xMean) * (value - yMean);
+          denominator += (index - xMean) * (index - xMean);
+        });
+
+        const slope = denominator ? numerator / denominator : 0;
+        const intercept = yMean - slope * xMean;
+        return values.map((_, index) => Math.max(0, slope * index + intercept));
+      }
+
+      function renderTimelineChart() {
+        const current = state.dashboard?.current;
+        if (!current) {
+          return;
+        }
+
+        const labels = current.timeline.map((item) => item.date);
+        const sessions = current.timeline.map((item) => item.sessions);
+        const trend = computeTrend(sessions);
+        const compareTimeline = state.compareEnabled ? state.dashboard.compare?.timeline || [] : [];
+        const compareData = compareTimeline.map((item) => item.sessions);
+        const compareLabels = compareTimeline.map((item) => item.date);
+
+        const maxTotal = sessions.reduce((sum, value) => sum + value, 0);
+        els.timelineSummary.textContent = `${formatNumber(maxTotal)} sessions across ${formatNumber(
+          sessions.length
+        )} days`;
+
+        if (state.charts.timeline) {
+          state.charts.timeline.destroy();
+        }
+
+        state.charts.timeline = new Chart(els.timelineChart, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Sessions",
+                data: sessions,
+                borderColor: CHART_COLORS.blue,
+                backgroundColor: "rgba(79, 140, 255, 0.18)",
+                borderWidth: 2.4,
+                fill: true,
+                tension: 0.32,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+              },
+              {
+                label: "Trend",
+                data: trend,
+                borderColor: CHART_COLORS.cyan,
+                borderDash: [6, 6],
+                borderWidth: 1.6,
+                fill: false,
+                tension: 0,
+                pointRadius: 0,
+              },
+              ...(state.compareEnabled
+                ? [
+                  {
+                    label: `Compare (${compareLabels.length ? formatRangeLabel(state.compareRange) : "no data"})`,
+                    data: compareData,
+                    borderColor: CHART_COLORS.purple,
+                    backgroundColor: "rgba(135, 104, 255, 0.06)",
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.28,
+                    pointRadius: 0,
+                  },
+                ]
+                : []),
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: {
+                labels: {
+                  color: "#ecf4ff",
+                  usePointStyle: true,
+                },
+              },
+              tooltip: {
+                backgroundColor: "rgba(7, 17, 31, 0.94)",
+                borderColor: "rgba(125, 154, 196, 0.18)",
+                borderWidth: 1,
+                titleColor: "#ecf4ff",
+                bodyColor: "#c8d7eb",
+                callbacks: {
+                  title(items) {
+                    return formatDateDisplay(items[0].label);
+                  },
+                },
+              },
+              weekendBackground: { labels },
+            },
+            scales: {
+              x: {
+                grid: { color: "transparent" },
+                ticks: {
+                  color: "#95acc8",
+                  maxTicksLimit: 10,
+                  callback(value, index) {
+                    return formatDateShort(labels[index]);
+                  },
+                },
+              },
+              y: {
+                grid: { color: CHART_COLORS.grid },
+                ticks: {
+                  color: "#95acc8",
+                  callback(value) {
+                    return formatCompact(value);
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function renderDonutChart(chartKey, canvas, labels, values, colors) {
+        if (state.charts[chartKey]) {
+          state.charts[chartKey].destroy();
+        }
+
+        state.charts[chartKey] = new Chart(canvas, {
+          type: "doughnut",
+          data: {
+            labels,
+            datasets: [
+              {
+                data: values,
+                backgroundColor: colors,
+                borderWidth: 0,
+                hoverOffset: 8,
+              },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            cutout: "68%",
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  color: "#ecf4ff",
+                  usePointStyle: true,
+                  padding: 18,
+                },
+              },
+              tooltip: {
+                backgroundColor: "rgba(7, 17, 31, 0.94)",
+                borderColor: "rgba(125, 154, 196, 0.18)",
+                borderWidth: 1,
+                titleColor: "#ecf4ff",
+                bodyColor: "#c8d7eb",
+              },
+            },
+          },
+        });
+      }
+
+      function renderTrafficSources() {
+        const current = state.dashboard?.current;
+        if (!current) {
+          return;
+        }
+
+        const labels = current.sources.map((item) => item.label);
+        const values = current.sources.map((item) => item.value);
+        renderDonutChart(
+          "traffic",
+          els.trafficChart,
+          labels,
+          values,
+          [
+            CHART_COLORS.blue,
+            CHART_COLORS.cyan,
+            CHART_COLORS.purple,
+            CHART_COLORS.purple2,
+            CHART_COLORS.amber,
+            CHART_COLORS.green,
+            CHART_COLORS.grey,
+          ]
+        );
+
+        els.trafficTableWrap.innerHTML = makeTable(
+          ["Channel", "Sessions", "Share"],
+          current.sources.map((item) => [
+            escapeHtml(item.label),
+            formatNumber(item.value),
+            formatRatio(item.share * 100),
+          ]),
+          [1, 2]
+        );
+      }
+
+      function renderBehavior() {
+        const current = state.dashboard?.current;
+        if (!current) {
+          return;
+        }
+
+        const items = [
+          {
+            label: "Avg time on page",
+            value: formatDuration(current.behavior.avgTimeOnPage),
+            note: "User engagement duration divided by pageviews",
+          },
+          {
+            label: "Scroll reach (90%+)",
+            value: formatPercent(current.behavior.scrollDepth),
+            note: "Based on GA4 scrolled users if enhanced measurement is active",
+          },
+          {
+            label: "Estimated exit rate",
+            value: formatPercent(current.behavior.exitRate),
+            note: "Derived from next-page transitions vs total pageviews",
+          },
+          {
+            label: "Entrances",
+            value: formatNumber(current.behavior.entrances),
+            note: "Sessions that started on this page",
+          },
+        ];
+
+        els.behaviorGrid.innerHTML = items
+          .map(
+            (item) => `
+                <div class="behavior-card">
+                  <span class="muted">${escapeHtml(item.label)}</span>
+                  <strong>${escapeHtml(item.value)}</strong>
+                  <p class="mini-note">${escapeHtml(item.note)}</p>
+                </div>
+              `
+          )
+          .join("");
+      }
+
+      function renderDeviceMix() {
+        const current = state.dashboard?.current;
+        if (!current) {
+          return;
+        }
+
+        renderDonutChart(
+          "device",
+          els.deviceChart,
+          current.devices.map((item) => item.label),
+          current.devices.map((item) => item.value),
+          [CHART_COLORS.blue, CHART_COLORS.purple, CHART_COLORS.cyan, CHART_COLORS.grey]
+        );
+
+        els.deviceTableWrap.innerHTML = makeTable(
+          ["Device", "Users", "Share"],
+          current.devices.map((item) => [
+            escapeHtml(item.label),
+            formatNumber(item.value),
+            formatRatio(item.share * 100),
+          ]),
+          [1, 2]
+        );
+      }
+
+      function renderCountries() {
+        const current = state.dashboard?.current;
+        if (!current) {
+          return;
+        }
+
+        els.countryTableWrap.innerHTML = makeTable(
+          ["Country", "Users", "Share"],
+          current.countries.map((item) => [
+            escapeHtml(item.label),
+            formatNumber(item.value),
+            formatRatio(item.share * 100),
+          ]),
+          [1, 2]
+        );
+      }
+
+      function normalizeReferrer(referrer) {
+        if (!referrer || referrer === "(direct)" || referrer === "(not set)") {
+          return "Direct / none";
+        }
+
+        try {
+          const url = new URL(referrer);
+          const isInternal = state.hostnames.includes(url.hostname);
+          if (isInternal) {
+            return `${url.pathname || "/"}${url.search || ""}`;
+          }
+          return `${url.hostname}${url.pathname && url.pathname !== "/" ? url.pathname : ""}`;
+        } catch (error) {
+          return referrer;
+        }
+      }
+
+      function renderJourneyFlow() {
+        const current = state.dashboard?.current;
+        if (!current) {
+          return;
+        }
+
+        const journey = current.journey;
+        els.journeyModeBadge.textContent = `${journey.previous.length} sources · ${journey.next.length} exits`;
+        els.journeyLegend.innerHTML = `
+            <div class="legend-tile">
+              <span class="muted">Incoming pageviews</span>
+              <strong>${formatNumber(journey.incomingTotal)}</strong>
+              <p class="hint">Top previous pages and referrers feeding this page.</p>
+            </div>
+            <div class="legend-tile">
+              <span class="muted">Current pageviews</span>
+              <strong>${formatNumber(current.overview.pageViews)}</strong>
+              <p class="hint">Total pageviews recorded for the selected page.</p>
+            </div>
+            <div class="legend-tile">
+              <span class="muted">Estimated exits</span>
+              <strong>${formatNumber(journey.exitCount)}</strong>
+              <p class="hint">${formatPercent(journey.exitRate)} of pageviews ended here.</p>
+            </div>
+          `;
+
+        if (!journey.previous.length && !journey.next.length) {
+          els.journeyFlow.innerHTML = `<div class="empty-state"><strong>No flow rows returned</strong>The page did not have enough page-to-page flow data for this range.</div>`;
+          return;
+        }
+
+        const maxIncoming = Math.max(...journey.previous.map((item) => item.value), 1);
+        const maxOutgoing = Math.max(...journey.next.map((item) => item.value), 1);
+        const previousHtml = journey.previous
+          .map(
+            (item) => `
+                <div class="flow-node journey-prev" data-flow-side="prev" style="--weight:${(item.value / maxIncoming).toFixed(4)}">
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <span class="flow-count">${formatNumber(item.value)} pageviews</span>
+                  <small>${formatRatio(item.share * 100)} of incoming flow</small>
+                </div>
+              `
+          )
+          .join("");
+
+        const nextHtml = journey.next
+          .map(
+            (item) => `
+                <div class="flow-node journey-next" data-flow-side="next" style="--weight:${(item.value / maxOutgoing).toFixed(4)}">
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <span class="flow-count">${formatNumber(item.value)} pageviews</span>
+                  <small>${formatRatio(item.share * 100)} of outgoing flow</small>
+                </div>
+              `
+          )
+          .join("");
+
+        els.journeyFlow.innerHTML = `
+            <svg class="journey-svg" id="journeySvg"></svg>
+            <div class="journey-grid">
+              <div class="journey-column" id="journeyPrevColumn">${previousHtml}</div>
+              <div class="journey-center">
+                <div class="flow-node central" id="journeyCenterNode">
+                  <span class="muted">Selected page</span>
+                  <strong>${escapeHtml(state.selectedPagePath)}</strong>
+                  <span class="flow-count">${formatNumber(current.overview.pageViews)} pageviews</span>
+                  <small>${escapeHtml(getSelectedPage()?.title || state.selectedPagePath)}</small>
+                </div>
+              </div>
+              <div class="journey-column" id="journeyNextColumn">${nextHtml}</div>
+            </div>
+          `;
+
+        requestAnimationFrame(drawJourneyConnectors);
+      }
+
+      function drawJourneyConnectors() {
+        const svg = document.getElementById("journeySvg");
+        const layout = els.journeyFlow;
+        const centerNode = document.getElementById("journeyCenterNode");
+        if (!svg || !layout || !centerNode) {
+          return;
+        }
+
+        const bounds = layout.getBoundingClientRect();
+        svg.setAttribute("viewBox", `0 0 ${Math.max(bounds.width, 1)} ${Math.max(bounds.height, 1)}`);
+        svg.innerHTML = "";
+
+        const centerBounds = centerNode.getBoundingClientRect();
+        const centerLeftX = centerBounds.left - bounds.left;
+        const centerRightX = centerBounds.right - bounds.left;
+        const centerY = centerBounds.top - bounds.top + centerBounds.height / 2;
+
+        const prevNodes = layout.querySelectorAll(".journey-prev");
+        prevNodes.forEach((node, index) => {
+          const rect = node.getBoundingClientRect();
+          const startX = rect.right - bounds.left;
+          const startY = rect.top - bounds.top + rect.height / 2;
+          const curve = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          const strokeWidth = Math.max(1.5, 2 + index * 0.1);
+          curve.setAttribute(
+            "d",
+            `M ${startX} ${startY} C ${startX + 70} ${startY}, ${centerLeftX - 70} ${centerY}, ${centerLeftX} ${centerY}`
+          );
+          curve.setAttribute("fill", "none");
+          curve.setAttribute("stroke", "rgba(79, 140, 255, 0.28)");
+          curve.setAttribute("stroke-width", String(strokeWidth));
+          curve.setAttribute("stroke-linecap", "round");
+          svg.appendChild(curve);
+        });
+
+        const nextNodes = layout.querySelectorAll(".journey-next");
+        nextNodes.forEach((node, index) => {
+          const rect = node.getBoundingClientRect();
+          const endX = rect.left - bounds.left;
+          const endY = rect.top - bounds.top + rect.height / 2;
+          const curve = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          const strokeWidth = Math.max(1.5, 2 + index * 0.1);
+          curve.setAttribute(
+            "d",
+            `M ${centerRightX} ${centerY} C ${centerRightX + 70} ${centerY}, ${endX - 70} ${endY}, ${endX} ${endY}`
+          );
+          curve.setAttribute("fill", "none");
+          curve.setAttribute("stroke", "rgba(135, 104, 255, 0.24)");
+          curve.setAttribute("stroke-width", String(strokeWidth));
+          curve.setAttribute("stroke-linecap", "round");
+          svg.appendChild(curve);
+        });
+      }
+
+      function renderRealtime() {
+        const realtime = state.dashboard?.realtime;
+        if (!realtime) {
+          return;
+        }
+
+        const summary = [
+          {
+            label: "Active users now",
+            value: formatNumber(realtime.activeUsers),
+            note: "Matching page title",
+          },
+          {
+            label: "Countries",
+            value: formatNumber(realtime.countryCount),
+            note: "Live coverage",
+          },
+          {
+            label: "Device categories",
+            value: formatNumber(realtime.deviceCount),
+            note: "Live mix",
+          },
+          {
+            label: "Last refresh",
+            value: realtime.lastUpdated,
+            note: "Auto-refresh every 30s",
+          },
+        ];
+
+        els.realtimeSummary.innerHTML = summary
+          .map(
+            (item) => `
+                <div class="stat-chip">
+                  <span class="muted">${escapeHtml(item.label)}</span>
+                  <strong>${escapeHtml(item.value)}</strong>
+                  <p class="hint">${escapeHtml(item.note)}</p>
+                </div>
+              `
+          )
+          .join("");
+
+        els.realtimeTableWrap.innerHTML = makeTable(
+          ["Country", "Device", "Active users"],
+          realtime.rows.map((item) => [
+            escapeHtml(item.country || "Unknown"),
+            escapeHtml(item.device || "Unknown"),
+            formatNumber(item.activeUsers),
+          ]),
+          [2]
+        );
+      }
+
+      function renderSelectedPageHeader() {
+        const page = getSelectedPage();
+        if (!page) {
+          els.selectedPageHeadline.textContent = "Choose a page";
+          els.selectedPageSubhead.textContent =
+            "Connect the GA4 property, then select any page from the left rail to load a full page-level report.";
+          return;
+        }
+
+        const stats = state.pageStats.get(page.path) || { sessions: 0, views: 0, users: 0 };
+        els.selectedPageHeadline.textContent = page.path;
+        els.selectedPageSubhead.textContent = `${page.title} | ${formatNumber(
+          stats.sessions
+        )} sessions | ${formatNumber(stats.views)} views | ${formatRangeLabel(state.currentRange)}`;
+      }
+
+      function renderDashboard() {
+        renderSelectedPageHeader();
+        renderOverviewCards();
+        renderJourneyFlow();
+        renderTimelineChart();
+        renderTrafficSources();
+        renderBehavior();
+        renderDeviceMix();
+        renderCountries();
+        renderRealtime();
+      }
+
+      async function fetchPageDashboard(path) {
+        const currentRange = { startDate: state.currentRange.start, endDate: state.currentRange.end };
+        const compareRange = { startDate: state.compareRange.start, endDate: state.compareRange.end };
+        const referrerRegex = selectedPageReferrerRegex(path);
+        const landingRegex = landingPageRegex(path);
+
+        const requests = [
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: currentPageFilter(path),
+            metrics: [
+              { name: "sessions" },
+              { name: "totalUsers" },
+              { name: "averageSessionDuration" },
+              { name: "bounceRate" },
+              { name: "screenPageViews" },
+              { name: "userEngagementDuration" },
+              { name: "scrolledUsers" },
+            ],
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: currentPageFilter(path),
+            dimensions: [{ name: "newVsReturning" }],
+            metrics: [{ name: "totalUsers" }],
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: currentPageFilter(path),
+            dimensions: [{ name: "date" }],
+            metrics: [{ name: "sessions" }],
+            keepEmptyRows: true,
+            orderBys: [{ dimension: { dimensionName: "date" }, desc: false }],
+            limit: "10000",
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: currentPageFilter(path),
+            dimensions: [{ name: "sessionDefaultChannelGroup" }],
+            metrics: [{ name: "sessions" }],
+            orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+            limit: "100",
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: currentPageFilter(path),
+            dimensions: [{ name: "deviceCategory" }],
+            metrics: [{ name: "totalUsers" }],
+            orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }],
+            limit: "20",
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: currentPageFilter(path),
+            dimensions: [{ name: "country" }],
+            metrics: [{ name: "totalUsers" }],
+            orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }],
+            limit: "5",
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: pageViewPathFilter(path),
+            dimensions: [{ name: "pageReferrer" }],
+            metrics: [{ name: "screenPageViews" }],
+            orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+            limit: "250",
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: andFilters([
+              buildDimensionFilter("pageReferrer", "FULL_REGEXP", referrerRegex),
+              buildDimensionFilter("eventName", "EXACT", "page_view"),
+            ]),
+            dimensions: [{ name: "pagePath" }],
+            metrics: [{ name: "screenPageViews" }],
+            orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+            limit: "250",
+          },
+          {
+            dateRanges: [currentRange],
+            dimensionFilter: buildDimensionFilter("landingPagePlusQueryString", "FULL_REGEXP", landingRegex),
+            metrics: [{ name: "sessions" }],
+          },
+        ];
+
+        const [currentBatch, compareBatch, realtimeSummary, realtimeDetail] = await Promise.all([
+          batchRunReports(requests),
+          state.compareEnabled
+            ? batchRunReports([
+              {
+                dateRanges: [compareRange],
+                dimensionFilter: currentPageFilter(path),
+                metrics: [
+                  { name: "sessions" },
+                  { name: "totalUsers" },
+                  { name: "averageSessionDuration" },
+                  { name: "bounceRate" },
+                  { name: "screenPageViews" },
+                  { name: "userEngagementDuration" },
+                  { name: "scrolledUsers" },
+                ],
+              },
+              {
+                dateRanges: [compareRange],
+                dimensionFilter: currentPageFilter(path),
+                dimensions: [{ name: "newVsReturning" }],
+                metrics: [{ name: "totalUsers" }],
+              },
+              {
+                dateRanges: [compareRange],
+                dimensionFilter: currentPageFilter(path),
+                dimensions: [{ name: "date" }],
+                metrics: [{ name: "sessions" }],
+                keepEmptyRows: true,
+                orderBys: [{ dimension: { dimensionName: "date" }, desc: false }],
+                limit: "10000",
+              },
+            ])
+            : Promise.resolve({ reports: [] }),
+          runRealtimeReport({
+            dimensions: [{ name: "unifiedScreenName" }],
+            metrics: [{ name: "activeUsers" }],
+            orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+            limit: "250",
+          }),
+          getSelectedPage()?.title
+            ? runRealtimeReport({
+              dimensionFilter: buildDimensionFilter("unifiedScreenName", "EXACT", getSelectedPage().title),
+              metricAggregations: ["TOTAL"],
+              dimensions: [{ name: "country" }, { name: "deviceCategory" }],
+              metrics: [{ name: "activeUsers" }],
+              orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+              limit: "100",
+            })
+            : Promise.resolve({ rows: [], totals: [] }),
+        ]);
+
+        state.realtimeTitleMap = new Map(
+          (realtimeSummary.rows || []).map((row) => [dimensionValue(row, 0), metricValue(row, 0)])
+        );
+        renderSidebarPages();
+
+        const reports = currentBatch.reports || [];
+        const overviewRow = reports[0]?.rows?.[0];
+        const nvRows = reports[1]?.rows || [];
+        const timelineRows = reports[2]?.rows || [];
+        const sourceRows = reports[3]?.rows || [];
+        const deviceRows = reports[4]?.rows || [];
+        const countryRows = reports[5]?.rows || [];
+        const prevRows = reports[6]?.rows || [];
+        const nextRows = reports[7]?.rows || [];
+        const entranceRow = reports[8]?.rows?.[0];
+
+        const current = {
+          overview: {
+            sessions: metricValue(overviewRow, 0),
+            totalUsers: metricValue(overviewRow, 1),
+            averageSessionDuration: metricValue(overviewRow, 2),
+            bounceRate: metricValue(overviewRow, 3),
+            pageViews: metricValue(overviewRow, 4),
+            userEngagementDuration: metricValue(overviewRow, 5),
+            scrolledUsers: metricValue(overviewRow, 6),
+          },
+          newVsReturning: (() => {
+            let newUsers = 0;
+            let returningUsers = 0;
+            nvRows.forEach((row) => {
+              const label = dimensionValue(row, 0).toLowerCase();
+              const users = metricValue(row, 0);
+              if (label.includes("new")) {
+                newUsers += users;
+              } else if (label.includes("return")) {
+                returningUsers += users;
+              }
+            });
+            const total = newUsers + returningUsers;
+            return {
+              newUsers,
+              returningUsers,
+              newShare: total ? newUsers / total : 0,
+              returningShare: total ? returningUsers / total : 0,
+            };
+          })(),
+          timeline: timelineRows.map((row) => ({
+            date: gaDateToIso(dimensionValue(row, 0)),
+            sessions: metricValue(row, 0),
+          })),
+          sources: normalizeSourceBuckets(
+            sourceRows.map((row) => ({
+              label: dimensionValue(row, 0) || "Other",
+              value: metricValue(row, 0),
+            })),
+            metricValue(overviewRow, 0)
+          ),
+          devices: (() => {
+            const total = deviceRows.reduce((sum, row) => sum + metricValue(row, 0), 0);
+            return deviceRows.map((row) => ({
+              label: dimensionValue(row, 0) || "Unknown",
+              value: metricValue(row, 0),
+              share: total ? metricValue(row, 0) / total : 0,
+            }));
+          })(),
+          countries: (() => {
+            const total = countryRows.reduce((sum, row) => sum + metricValue(row, 0), 0);
+            return countryRows.map((row) => ({
+              label: dimensionValue(row, 0) || "Unknown",
+              value: metricValue(row, 0),
+              share: total ? metricValue(row, 0) / total : 0,
+            }));
+          })(),
+          journey: (() => {
+            const incomingMap = new Map();
+            prevRows.forEach((row) => {
+              const label = normalizeReferrer(dimensionValue(row, 0));
+              const value = metricValue(row, 0);
+              incomingMap.set(label, (incomingMap.get(label) || 0) + value);
+            });
+
+            const outgoingMap = new Map();
+            nextRows.forEach((row) => {
+              const label = dimensionValue(row, 0) || "(not set)";
+              const value = metricValue(row, 0);
+              outgoingMap.set(label, (outgoingMap.get(label) || 0) + value);
+            });
+
+            const incomingTotal = Array.from(incomingMap.values()).reduce((sum, value) => sum + value, 0);
+            const outgoingTotal = Array.from(outgoingMap.values()).reduce((sum, value) => sum + value, 0);
+            const previous = Array.from(incomingMap.entries())
+              .map(([label, value]) => ({
+                label,
+                value,
+                share: incomingTotal ? value / incomingTotal : 0,
+              }))
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 10);
+            const next = Array.from(outgoingMap.entries())
+              .map(([label, value]) => ({
+                label,
+                value,
+                share: outgoingTotal ? value / outgoingTotal : 0,
+              }))
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 10);
+            const exitCount = Math.max(0, metricValue(overviewRow, 4) - outgoingTotal);
+            const exitRate = metricValue(overviewRow, 4) > 0 ? exitCount / metricValue(overviewRow, 4) : 0;
+
+            return {
+              previous,
+              next,
+              incomingTotal,
+              outgoingTotal,
+              exitCount,
+              exitRate,
+            };
+          })(),
+          behavior: (() => {
+            const pageViews = metricValue(overviewRow, 4);
+            const totalUsers = metricValue(overviewRow, 1);
+            return {
+              avgTimeOnPage: pageViews ? metricValue(overviewRow, 5) / pageViews : 0,
+              scrollDepth: totalUsers ? metricValue(overviewRow, 6) / totalUsers : 0,
+              exitRate: Math.max(
+                0,
+                pageViews
+                  ? (pageViews -
+                    nextRows.reduce((sum, row) => sum + metricValue(row, 0), 0)) /
+                  pageViews
+                  : 0
+              ),
+              entrances: metricValue(entranceRow, 0),
+            };
+          })(),
+        };
+
+        const compareReports = compareBatch.reports || [];
+        const compareOverviewRow = compareReports[0]?.rows?.[0];
+        const compareNvRows = compareReports[1]?.rows || [];
+        const compareTimelineRows = compareReports[2]?.rows || [];
+
+        const compare = state.compareEnabled
+          ? {
+            overview: {
+              sessions: metricValue(compareOverviewRow, 0),
+              totalUsers: metricValue(compareOverviewRow, 1),
+              averageSessionDuration: metricValue(compareOverviewRow, 2),
+              bounceRate: metricValue(compareOverviewRow, 3),
+              pageViews: metricValue(compareOverviewRow, 4),
+            },
+            newVsReturning: (() => {
+              let newUsers = 0;
+              let returningUsers = 0;
+              compareNvRows.forEach((row) => {
+                const label = dimensionValue(row, 0).toLowerCase();
+                const users = metricValue(row, 0);
+                if (label.includes("new")) {
+                  newUsers += users;
+                } else if (label.includes("return")) {
+                  returningUsers += users;
+                }
+              });
+              const total = newUsers + returningUsers;
+              return {
+                newUsers,
+                returningUsers,
+                newShare: total ? newUsers / total : 0,
+                returningShare: total ? returningUsers / total : 0,
+              };
+            })(),
+            timeline: compareTimelineRows.map((row) => ({
+              date: gaDateToIso(dimensionValue(row, 0)),
+              sessions: metricValue(row, 0),
+            })),
+          }
+          : null;
+
+        const realtimeRows = (realtimeDetail.rows || []).map((row) => ({
+          country: dimensionValue(row, 0),
+          device: dimensionValue(row, 1),
+          activeUsers: metricValue(row, 0),
+        }));
+
+        const realtime = {
+          activeUsers: metricValue(realtimeDetail.totals?.[0], 0),
+          countryCount: new Set(realtimeRows.map((item) => item.country).filter(Boolean)).size,
+          deviceCount: new Set(realtimeRows.map((item) => item.device).filter(Boolean)).size,
+          rows: realtimeRows,
+          lastUpdated: new Date().toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+        };
+
+        return { current, compare, realtime };
+      }
+
+      async function refreshRealtimeOnly() {
+        if (!state.credentials || !state.selectedPagePath) {
+          return;
+        }
+
+        try {
+          els.realtimeClock.textContent = "Refreshing live...";
+          const page = getSelectedPage();
+          const [summary, detail] = await Promise.all([
+            runRealtimeReport({
+              dimensions: [{ name: "unifiedScreenName" }],
+              metrics: [{ name: "activeUsers" }],
+              orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+              limit: "250",
+            }),
+            page?.title
+              ? runRealtimeReport({
+                dimensionFilter: buildDimensionFilter("unifiedScreenName", "EXACT", page.title),
+                metricAggregations: ["TOTAL"],
+                dimensions: [{ name: "country" }, { name: "deviceCategory" }],
+                metrics: [{ name: "activeUsers" }],
+                orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+                limit: "100",
+              })
+              : Promise.resolve({ rows: [], totals: [] }),
+          ]);
+
+          state.realtimeTitleMap = new Map(
+            (summary.rows || []).map((row) => [dimensionValue(row, 0), metricValue(row, 0)])
+          );
+
+          const realtimeRows = (detail.rows || []).map((row) => ({
+            country: dimensionValue(row, 0),
+            device: dimensionValue(row, 1),
+            activeUsers: metricValue(row, 0),
+          }));
+
+          if (state.dashboard) {
+            state.dashboard.realtime = {
+              activeUsers: metricValue(detail.totals?.[0], 0),
+              countryCount: new Set(realtimeRows.map((item) => item.country).filter(Boolean)).size,
+              deviceCount: new Set(realtimeRows.map((item) => item.device).filter(Boolean)).size,
+              rows: realtimeRows,
+              lastUpdated: new Date().toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              }),
+            };
+          }
+
+          renderSidebarPages();
+          renderRealtime();
+          els.realtimeClock.textContent = `Live · ${state.dashboard?.realtime?.lastUpdated || "updated"}`;
+        } catch (error) {
+          console.error("Realtime refresh failed:", error);
+          els.realtimeClock.textContent = "Realtime refresh failed";
+        }
+      }
+
+      async function loadPageStats() {
+        state.pageStats = await fetchPageStatsForRange(state.currentRange);
+        renderSidebarPages();
+        renderSelectedPageHeader();
+      }
+
+      async function loadDashboard(force = false) {
+        if (!state.credentials) {
+          return;
+        }
+
+        const page = getSelectedPage();
+        if (!page) {
+          renderSidebarPages();
+          return;
+        }
+
+        setLoading(true, `Fetching page report for ${page.path}`);
+        els.realtimeClock.textContent = "Live refresh paused";
+
+        try {
+          if (force) {
+            state.token = null;
+          }
+          state.dashboard = await fetchPageDashboard(page.path);
+          renderDashboard();
+          setStatus("connected", "Connected", `Loaded ${page.path} · ${formatRangeLabel(state.currentRange)}`);
+          els.realtimeClock.textContent = `Live · ${state.dashboard.realtime.lastUpdated}`;
+        } catch (error) {
+          console.error(error);
+          const message =
+            error instanceof Error
+              ? error.message
+              : "The dashboard could not load the selected page report.";
+          setStatus("error", "Load failed", message);
+          showToast("Dashboard load failed", message);
+          els.overviewGrid.innerHTML = `
+              <div class="error-state" style="grid-column:1 / -1">
+                <strong>Could not load the selected page report</strong>
+                ${escapeHtml(message)}
+              </div>
+            `;
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function queueRealtimeRefresh() {
+        if (state.realtimeTimer) {
+          window.clearInterval(state.realtimeTimer);
+        }
+
+        state.realtimeTimer = window.setInterval(() => {
+          refreshRealtimeOnly();
+        }, 30000);
+      }
+
+      async function initializeDashboard() {
+        setLoading(true, "Connecting to Google Analytics");
+        els.propertyBadge.textContent = `Property ${state.propertyId}`;
+
+        try {
+          state.allTimeStart = await fetchAllTimeStart();
+          state.hostnames = await fetchHostnames();
+          state.currentRange = {
+            start: state.allTimeStart,
+            end: getTodayIso(),
+            label: "All time",
+          };
+          state.compareRange = previousRangeFor(state.currentRange);
+          syncDateControls();
+
+          state.allPages = await fetchAllPagesCatalog();
+          els.pageSummary.textContent = `${formatNumber(
+            state.allPages.length
+          )} pages discovered since ${formatDateDisplay(
+            state.allTimeStart
+          )}. Session badges follow the selected date range. Live dots are title-based best-effort matches from the GA4 Realtime API.`;
+          await loadPageStats();
+          state.selectedPagePath = state.selectedPagePath || state.allPages[0]?.path || null;
+          renderSidebarPages();
+          await loadDashboard();
+          queueRealtimeRefresh();
+          closeSettingsModal(true);
+        } catch (error) {
+          console.error(error);
+          const message =
+            error instanceof Error ? error.message : "Could not initialize the dashboard.";
+          setStatus("error", "Connection failed", message);
+          showToast("Connection failed", message);
+          openSettingsModal();
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function exportCsv() {
+        if (!state.dashboard) {
+          showToast("No data to export", "Load a page report first, then export the current page CSV.");
+          return;
+        }
+
+        const page = getSelectedPage();
+        const current = state.dashboard.current;
+        const compare = state.dashboard.compare;
+        const lines = [];
+
+        function pushSection(title, rows) {
+          lines.push(title);
+          rows.forEach((row) => lines.push(row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")));
+          lines.push("");
+        }
+
+        pushSection("Report", [
+          ["Property ID", state.propertyId],
+          ["Page path", page?.path || ""],
+          ["Page title", page?.title || ""],
+          ["Primary range", formatRangeLabel(state.currentRange)],
+          ["Compare range", state.compareEnabled ? formatRangeLabel(state.compareRange) : "Off"],
+          ["Generated at", new Date().toISOString()],
+        ]);
+
+        pushSection("Overview", [
+          ["Metric", "Current", "Compare"],
+          ["Sessions", current.overview.sessions, compare?.overview?.sessions ?? ""],
+          ["Users", current.overview.totalUsers, compare?.overview?.totalUsers ?? ""],
+          ["Avg session duration", current.overview.averageSessionDuration, compare?.overview?.averageSessionDuration ?? ""],
+          ["Bounce rate", current.overview.bounceRate, compare?.overview?.bounceRate ?? ""],
+          ["Pageviews", current.overview.pageViews, compare?.overview?.pageViews ?? ""],
+          ["New users share", current.newVsReturning.newShare, compare?.newVsReturning?.newShare ?? ""],
+          ["Returning users share", current.newVsReturning.returningShare, compare?.newVsReturning?.returningShare ?? ""],
+        ]);
+
+        pushSection("Timeline", [
+          ["Date", "Sessions"],
+          ...current.timeline.map((item) => [item.date, item.sessions]),
+        ]);
+
+        pushSection("Traffic sources", [
+          ["Channel", "Sessions", "Share"],
+          ...current.sources.map((item) => [item.label, item.value, item.share]),
+        ]);
+
+        pushSection("Behavior", [
+          ["Metric", "Value"],
+          ["Avg time on page", current.behavior.avgTimeOnPage],
+          ["Scroll reach 90%+", current.behavior.scrollDepth],
+          ["Estimated exit rate", current.behavior.exitRate],
+          ["Entrances", current.behavior.entrances],
+        ]);
+
+        pushSection("Journey previous", [
+          ["Source", "Pageviews", "Share"],
+          ...current.journey.previous.map((item) => [item.label, item.value, item.share]),
+        ]);
+
+        pushSection("Journey next", [
+          ["Destination", "Pageviews", "Share"],
+          ...current.journey.next.map((item) => [item.label, item.value, item.share]),
+        ]);
+
+        pushSection("Devices", [
+          ["Device", "Users", "Share"],
+          ...current.devices.map((item) => [item.label, item.value, item.share]),
+        ]);
+
+        pushSection("Countries", [
+          ["Country", "Users", "Share"],
+          ...current.countries.map((item) => [item.label, item.value, item.share]),
+        ]);
+
+        pushSection("Realtime", [
+          ["Country", "Device", "Active users"],
+          ...state.dashboard.realtime.rows.map((item) => [
+            item.country,
+            item.device,
+            item.activeUsers,
+          ]),
+        ]);
+
+        const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `ga4-page-report-${(page?.path || "page").replace(/[^\w-]+/g, "_")}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        showToast("CSV exported", "The current page report has been downloaded as CSV.");
+      }
+
+      async function applyDateRange() {
+        const start = els.primaryStart.value;
+        const end = els.primaryEnd.value;
+        if (!start || !end || start > end) {
+          showToast("Invalid range", "Choose a valid primary start and end date.");
+          return;
+        }
+
+        state.currentRange = {
+          start,
+          end,
+          label: `${formatDateShort(start)} - ${formatDateShort(end)}`,
+        };
+
+        if (state.compareEnabled) {
+          const compareStart = els.compareStart.value;
+          const compareEnd = els.compareEnd.value;
+          if (!compareStart || !compareEnd || compareStart > compareEnd) {
+            showToast("Invalid compare range", "Choose a valid comparison start and end date.");
+            return;
+          }
+          state.compareRange = {
+            start: compareStart,
+            end: compareEnd,
+            label: `${formatDateShort(compareStart)} - ${formatDateShort(compareEnd)}`,
+          };
+        } else {
+          state.compareRange = previousRangeFor(state.currentRange);
+        }
+
+        syncDateControls();
+        await loadPageStats();
+        await loadDashboard();
+      }
+
+      async function handleQuickRangeClick(key) {
+        if (!state.allTimeStart) {
+          return;
+        }
+
+        const today = getTodayIso();
+        const presets = {
+          today: { start: today, end: today, label: "Today" },
+          "7d": { start: shiftIsoDate(today, -6), end: today, label: "Last 7 days" },
+          "30d": { start: shiftIsoDate(today, -29), end: today, label: "Last 30 days" },
+          "90d": { start: shiftIsoDate(today, -89), end: today, label: "Last 90 days" },
+          all: { start: state.allTimeStart, end: today, label: "All time" },
+        };
+
+        state.currentRange = presets[key];
+        state.compareRange = previousRangeFor(state.currentRange);
+        syncDateControls();
+        await loadPageStats();
+        await loadDashboard();
+      }
+
+      async function handleSettingsSubmit(event) {
+        event.preventDefault();
+        try {
+          const credentials = parseCredentials(els.credentialsInput.value.trim());
+          const propertyId = els.propertyIdInput.value.trim();
+          if (!/^\d+$/.test(propertyId)) {
+            throw new Error("Property ID should only contain digits.");
+          }
+
+          state.credentials = credentials;
+          state.propertyId = propertyId;
+          state.cryptoKey = null;
+          state.token = null;
+          state.tokenExpiry = 0;
+          state.selectedPagePath = null;
+          els.serviceAccountEmail.value = credentials.client_email;
+
+          if (els.rememberCredentials.checked) {
+            saveSettingsLocally();
+          } else {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+
+          await initializeDashboard();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not parse the service-account JSON.";
+          showToast("Settings are invalid", message);
+        }
+      }
+
+      function bindEvents() {
+        els.pageSearch.addEventListener("input", (event) => {
+          state.sidebarSearch = event.target.value || "";
+          renderSidebarPages();
+        });
+
+        els.pageList.addEventListener("click", async (event) => {
+          const button = event.target.closest("[data-page-path]");
+          if (!button) {
+            return;
+          }
+
+          const path = button.getAttribute("data-page-path");
+          if (!path || path === state.selectedPagePath) {
+            if (window.innerWidth <= 960) {
+              document.body.classList.remove("sidebar-open");
+            }
+            return;
+          }
+
+          state.selectedPagePath = path;
+          renderSidebarPages();
+          renderSelectedPageHeader();
+          if (window.innerWidth <= 960) {
+            document.body.classList.remove("sidebar-open");
+          }
+          await loadDashboard();
+        });
+
+        document.querySelectorAll("[data-range]").forEach((button) => {
+          button.addEventListener("click", async () => {
+            await handleQuickRangeClick(button.getAttribute("data-range"));
+          });
+        });
+
+        els.applyRangeBtn.addEventListener("click", applyDateRange);
+        els.toggleCompareBtn.addEventListener("click", async () => {
+          state.compareEnabled = !state.compareEnabled;
+          if (state.compareEnabled) {
+            state.compareRange = previousRangeFor(state.currentRange);
+          }
+          syncDateControls();
+          if (state.selectedPagePath) {
+            await loadDashboard();
+          }
+        });
+        els.refreshBtn.addEventListener("click", async () => {
+          await loadPageStats();
+          await loadDashboard(true);
+        });
+        els.exportBtn.addEventListener("click", exportCsv);
+
+        const openSettings = () => {
+          hydrateSettingsForm({
+            propertyId: state.propertyId,
+            credentials: state.credentials,
+          });
+          openSettingsModal();
+        };
+
+        els.openSettingsBtn.addEventListener("click", openSettings);
+        els.sidebarSettingsBtn.addEventListener("click", openSettings);
+        els.closeSettingsBtn.addEventListener("click", () => closeSettingsModal(true));
+        els.cancelSettingsBtn.addEventListener("click", () => closeSettingsModal(Boolean(state.credentials)));
+        els.settingsForm.addEventListener("submit", handleSettingsSubmit);
+        els.clearStoredBtn.addEventListener("click", () => {
+          clearStoredSettings();
+          els.credentialsInput.value = "";
+          els.serviceAccountEmail.value = "Not loaded yet";
+          els.rememberCredentials.checked = false;
+        });
+
+        els.dismissBannerBtn.addEventListener("click", () => {
+          els.securityBanner.classList.add("hidden");
+          localStorage.setItem(BANNER_KEY, "1");
+        });
+
+        els.mobileMenuBtn.addEventListener("click", () => {
+          document.body.classList.toggle("sidebar-open");
+        });
+
+        window.addEventListener("resize", () => {
+          if (window.innerWidth > 960) {
+            document.body.classList.remove("sidebar-open");
+          }
+          requestAnimationFrame(drawJourneyConnectors);
+        });
+      }
+
+      async function boot() {
+        bindEvents();
+        hydrateSettingsForm();
+        if (localStorage.getItem(BANNER_KEY) === "1") {
+          els.securityBanner.classList.add("hidden");
+        }
+
+        const stored = loadStoredSettings();
+        if (stored?.credentials && stored?.propertyId) {
+          state.credentials = stored.credentials;
+          state.propertyId = stored.propertyId;
+          els.propertyIdInput.value = stored.propertyId;
+          els.serviceAccountEmail.value = stored.credentials.client_email || "Not loaded yet";
+          await initializeDashboard();
+          return;
+        }
+
+        syncDateControls();
+        openSettingsModal();
+      }
+
+      boot();
+    })();
+  </script>
+</body>
+
+</html>

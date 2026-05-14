@@ -16,6 +16,7 @@ import {
   Activity,
   Mail,
   Megaphone,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -108,7 +109,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      {/* Bottom user section */}
+      {/* Bottom separator */}
       <Separator />
     </div>
   );
@@ -170,6 +171,19 @@ export default function DashboardLayout({
                 className="w-64 pl-9 bg-gray-50 border-gray-200 focus:bg-white"
               />
             </div>
+
+            {/* GA4 Dashboard shortcut */}
+            <a
+              href="/ga4-dashboard.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="GA4 Page Intelligence"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 hover:border-emerald-300"
+            >
+              <BarChart2 className="h-3.5 w-3.5" />
+              GA4
+            </a>
+
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5 text-gray-500" />
               <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500" />

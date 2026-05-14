@@ -6,7 +6,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths
-  const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout"];
+  const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout", "/ga4-dashboard.html"];
   if (publicPaths.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
@@ -15,7 +15,7 @@ export async function proxy(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
-    pathname.match(/\.(png|jpg|jpeg|svg|ico|webp|css|js)$/)
+    pathname.match(/\.(png|jpg|jpeg|svg|ico|webp|css|js|html)$/)
   ) {
     return NextResponse.next();
   }
@@ -40,6 +40,6 @@ export const config = {
      * - favicon.ico
      * - public files (images, etc.)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js|ico|html)$).*)",
   ],
 };

@@ -13,7 +13,7 @@ import {
   Percent, MapPin, Monitor, Smartphone, Tablet, ImageIcon,
   Globe, BarChart3, Clock,
 } from "lucide-react";
-import type { NormalizedAd } from "@/lib/ads";
+import type { NormalizedAd, AdTrackingData } from "@/lib/ads";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 function formatDate(d: string | null) {
@@ -68,9 +68,11 @@ function EmptyChart({ icon: Icon, title, subtitle }: {
 /* ═══════════════════════════════════════════════════════════════════
    AD DETAIL COMPONENT
    ═══════════════════════════════════════════════════════════════════ */
-export function AdDetailClient({ ad }: { ad: NormalizedAd }) {
+export function AdDetailClient({ ad, tracking }: { ad: NormalizedAd; tracking: AdTrackingData }) {
 
-  /* ── Area-wise clicks placeholder chart ─────────────────────── */
+  const hasTrackingData = tracking.kpis.impressions > 0 || tracking.kpis.clicks > 0;
+
+  /* ── Area-wise clicks chart ─────────────────────────────────── */
   const areaChartOption = useMemo((): EChartsOption => ({
     tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
     color: ["#1d4ed8", "#10b981", "#f59e0b", "#8b5cf6", "#f43f5e", "#06b6d4", "#84cc16"],
@@ -80,13 +82,13 @@ export function AdDetailClient({ ad }: { ad: NormalizedAd }) {
     },
     series: [{
       type: "pie", radius: ["36%", "66%"], center: ["50%", "42%"],
-      data: [], // No tracking data yet
+      data: tracking.regions.map((r) => ({ name: r.region, value: r.count })),
       label: { show: false },
       emphasis: { scale: true, scaleSize: 6, label: { show: true, fontWeight: "bold", fontSize: 11 } },
     }],
-  }), []);
+  }), [tracking.regions]);
 
-  /* ── Device breakdown placeholder chart ─────────────────────── */
+  /* ── Device breakdown chart ─────────────────────────────────── */
   const deviceChartOption = useMemo((): EChartsOption => ({
     tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
     color: ["#3b82f6", "#8b5cf6", "#f59e0b"],
@@ -96,13 +98,13 @@ export function AdDetailClient({ ad }: { ad: NormalizedAd }) {
     },
     series: [{
       type: "pie", radius: ["40%", "70%"], center: ["50%", "44%"],
-      data: [], // No tracking data yet
+      data: tracking.devices.map((d) => ({ name: d.device, value: d.count })),
       label: { show: false },
       emphasis: { scale: true, scaleSize: 6, label: { show: true, fontWeight: "bold" } },
     }],
-  }), []);
+  }), [tracking.devices]);
 
-  /* ── Daily impressions placeholder ──────────────────────────── */
+  /* ── Daily performance chart ────────────────────────────────── */
   const dailyChartOption = useMemo((): EChartsOption => ({
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     color: ["#1d4ed8", "#10b981"],
@@ -112,7 +114,8 @@ export function AdDetailClient({ ad }: { ad: NormalizedAd }) {
       textStyle: { fontSize: 11, color: "#6b7280" },
     },
     xAxis: {
-      type: "category", data: [], // No tracking data yet
+      type: "category",
+      data: tracking.daily.map((d) => d.day.slice(5)), // "MM-DD"
       axisLabel: { color: "#94a3b8", fontSize: 11 },
       axisLine: { show: false }, axisTick: { show: false },
     },
@@ -123,12 +126,10 @@ export function AdDetailClient({ ad }: { ad: NormalizedAd }) {
       axisLine: { show: false },
     },
     series: [
-      { name: "Impressions", type: "bar", data: [], itemStyle: { color: "#1d4ed8", borderRadius: [4, 4, 0, 0] }, barMaxWidth: 28 },
-      { name: "Clicks", type: "bar", data: [], itemStyle: { color: "#10b981", borderRadius: [4, 4, 0, 0] }, barMaxWidth: 28 },
+      { name: "Impressions", type: "bar", data: tracking.daily.map((d) => d.impressions), itemStyle: { color: "#1d4ed8", borderRadius: [4, 4, 0, 0] }, barMaxWidth: 28 },
+      { name: "Clicks", type: "bar", data: tracking.daily.map((d) => d.clicks), itemStyle: { color: "#10b981", borderRadius: [4, 4, 0, 0] }, barMaxWidth: 28 },
     ],
-  }), []);
-
-  const hasTrackingData = false; // flip to true when tracking is wired
+  }), [tracking.daily]);
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-8 pb-8">
@@ -236,13 +237,13 @@ export function AdDetailClient({ ad }: { ad: NormalizedAd }) {
         </div>
       </section>
 
-      {/* ── KPI CARDS (placeholders — no tracking yet) ──────────── */}
+      {/* ── KPI CARDS ─────────────────────────────────────────────── */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Impressions", value: "—", icon: Eye, border: "border-l-blue-500", iconColor: "text-blue-600", hint: "Tracking not configured" },
-          { label: "Clicks", value: "—", icon: MousePointerClick, border: "border-l-emerald-500", iconColor: "text-emerald-600", hint: "Tracking not configured" },
-          { label: "CTR", value: "—", icon: Percent, border: "border-l-violet-500", iconColor: "text-violet-600", hint: "clicks / impressions × 100" },
-          { label: "Unique Visitors", value: "—", icon: Globe, border: "border-l-amber-500", iconColor: "text-amber-600", hint: "Tracking not configured" },
+          { label: "Impressions", value: hasTrackingData ? tracking.kpis.impressions.toLocaleString() : "—", icon: Eye, border: "border-l-blue-500", iconColor: "text-blue-600", hint: hasTrackingData ? "Total ad views" : "Awaiting tracking data" },
+          { label: "Clicks", value: hasTrackingData ? tracking.kpis.clicks.toLocaleString() : "—", icon: MousePointerClick, border: "border-l-emerald-500", iconColor: "text-emerald-600", hint: hasTrackingData ? "Total ad clicks" : "Awaiting tracking data" },
+          { label: "CTR", value: hasTrackingData ? `${tracking.kpis.ctr.toFixed(2)}%` : "—", icon: Percent, border: "border-l-violet-500", iconColor: "text-violet-600", hint: "clicks / impressions × 100" },
+          { label: "Unique Visitors", value: hasTrackingData ? tracking.kpis.uniqueVisitors.toLocaleString() : "—", icon: Globe, border: "border-l-amber-500", iconColor: "text-amber-600", hint: hasTrackingData ? "Distinct IPs" : "Awaiting tracking data" },
         ].map((kpi) => (
           <Card key={kpi.label} className={`border border-slate-200 border-l-4 ${kpi.border} bg-white shadow-sm`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
