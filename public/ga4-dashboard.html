@@ -879,6 +879,16 @@
       padding: 14px 16px;
       min-height: 72px;
       overflow: hidden;
+      transition: border-color 150ms ease, background 150ms ease;
+    }
+
+    .flow-node[data-flow-side] {
+      cursor: pointer;
+    }
+
+    .flow-node[data-flow-side]:hover {
+      border-color: rgba(79, 140, 255, 0.5);
+      background: rgba(255, 255, 255, 0.06);
     }
 
     .flow-node::before {
@@ -1639,6 +1649,28 @@
                 <div id="realtimeTableWrap"></div>
               </section>
             </section>
+
+            <section class="two-up" id="globalInsightsSection" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line);">
+              <section class="table-card">
+                <div class="panel-head">
+                  <div class="panel-head-left">
+                    <h3>Most Viewed Pages (Global)</h3>
+                    <p class="section-note">Top pages across the property by pageviews.</p>
+                  </div>
+                </div>
+                <div id="topViewedWrap"></div>
+              </section>
+
+              <section class="table-card">
+                <div class="panel-head">
+                  <div class="panel-head-left">
+                    <h3>Highest Drop-off Pages</h3>
+                    <p class="section-note">Pages with the highest bounce rate (min 10 views).</p>
+                  </div>
+                </div>
+                <div id="topDropoffWrap"></div>
+              </section>
+            </section>
           </div>
         </div>
       </div>
@@ -1748,6 +1780,7 @@
         compareRange: { start: null, end: null, label: "" },
         compareEnabled: false,
         dashboard: null,
+        globalInsights: null,
         charts: {},
         realtimeTimer: null,
         realtimeTitleMap: new Map(),
@@ -1812,6 +1845,8 @@
         timelineChart: document.getElementById("timelineChart"),
         trafficChart: document.getElementById("trafficChart"),
         deviceChart: document.getElementById("deviceChart"),
+        topViewedWrap: document.getElementById("topViewedWrap"),
+        topDropoffWrap: document.getElementById("topDropoffWrap"),
       };
 
       const weekendPlugin = {
@@ -2494,6 +2529,29 @@
         );
       }
 
+      async function fetchGlobalInsights(range) {
+        const response = await runReport({
+          dateRanges: [{ startDate: range.start, endDate: range.end }],
+          dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],
+          metrics: [{ name: "screenPageViews" }, { name: "bounceRate" }],
+          orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+          limit: "250",
+        });
+
+        const all = (response.rows || []).map(r => ({
+          path: dimensionValue(r, 0) || "/",
+          title: dimensionValue(r, 1) || dimensionValue(r, 0) || "/",
+          views: metricValue(r, 0),
+          bounceRate: metricValue(r, 1)
+        })).filter(page => page.path && page.path !== "(not set)");
+
+        const mostViewed = [...all].sort((a, b) => b.views - a.views).slice(0, 10);
+        const validForDropoff = all.filter(p => p.views >= 10);
+        const dropoffs = [...validForDropoff].sort((a, b) => b.bounceRate - a.bounceRate).slice(0, 10);
+
+        return { mostViewed, dropoffs };
+      }
+
       function getSelectedPage() {
         return state.allPages.find((page) => page.path === state.selectedPagePath) || state.allPages[0] || null;
       }
@@ -3016,6 +3074,31 @@
         );
       }
 
+      function renderGlobalInsights() {
+        if (!state.globalInsights) return;
+
+        const { mostViewed, dropoffs } = state.globalInsights;
+
+        els.topViewedWrap.innerHTML = makeTable(
+          ["Page", "Views"],
+          mostViewed.map(item => [
+            `<div class="page-title" style="white-space:normal;color:var(--text);">${escapeHtml(item.path)}<br><small class="muted">${escapeHtml(item.title)}</small></div>`,
+            formatNumber(item.views)
+          ]),
+          [1]
+        );
+
+        els.topDropoffWrap.innerHTML = makeTable(
+          ["Page", "Drop-off Rate", "Views"],
+          dropoffs.map(item => [
+            `<div class="page-title" style="white-space:normal;color:var(--text);">${escapeHtml(item.path)}<br><small class="muted">${escapeHtml(item.title)}</small></div>`,
+            formatPercent(item.bounceRate),
+            formatNumber(item.views)
+          ]),
+          [1, 2]
+        );
+      }
+
       function normalizeReferrer(referrer) {
         if (!referrer || referrer === "(direct)" || referrer === "(not set)") {
           return "Direct / none";
@@ -3241,6 +3324,7 @@
         renderDeviceMix();
         renderCountries();
         renderRealtime();
+        renderGlobalInsights();
       }
 
       async function fetchPageDashboard(path) {
@@ -3640,9 +3724,15 @@
       }
 
       async function loadPageStats() {
-        state.pageStats = await fetchPageStatsForRange(state.currentRange);
+        const [stats, global] = await Promise.all([
+          fetchPageStatsForRange(state.currentRange),
+          fetchGlobalInsights(state.currentRange)
+        ]);
+        state.pageStats = stats;
+        state.globalInsights = global;
         renderSidebarPages();
         renderSelectedPageHeader();
+        renderGlobalInsights();
       }
 
       async function loadDashboard(force = false) {
@@ -3942,6 +4032,32 @@
             document.body.classList.remove("sidebar-open");
           }
           await loadDashboard();
+        });
+
+        els.journeyFlow.addEventListener("click", async (event) => {
+          const node = event.target.closest("[data-flow-side]");
+          if (!node) return;
+
+          const pathLabel = node.querySelector("strong")?.textContent;
+          if (pathLabel && pathLabel.startsWith("/")) {
+            if (pathLabel !== state.selectedPagePath) {
+              state.selectedPagePath = pathLabel;
+              els.pageSearch.value = "";
+              state.sidebarSearch = "";
+              renderSidebarPages();
+              renderSelectedPageHeader();
+              if (window.innerWidth <= 960) {
+                document.body.classList.remove("sidebar-open");
+              }
+              
+              const dashboardWrap = document.getElementById("dashboardWrap");
+              if (dashboardWrap) {
+                dashboardWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+              
+              await loadDashboard();
+            }
+          }
         });
 
         document.querySelectorAll("[data-range]").forEach((button) => {
