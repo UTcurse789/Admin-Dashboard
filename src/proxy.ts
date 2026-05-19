@@ -6,7 +6,13 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths
-  const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout", "/ga4-dashboard.html"];
+  const publicPaths = [
+    "/login",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/track-event",
+    "/ga4-dashboard.html",
+  ];
   if (publicPaths.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }

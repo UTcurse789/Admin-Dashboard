@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useDeferredValue, useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
@@ -362,10 +364,12 @@ function UsersTable({
                   </Avatar>
 
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-950">
-                      {user.salutation ? `${user.salutation} ` : ""}
-                      {getDisplayName(user)}
-                    </p>
+                    <Link href={`/users/${user.id}`} className="hover:underline">
+                      <p className="truncate font-medium text-slate-950">
+                        {user.salutation ? `${user.salutation} ` : ""}
+                        {getDisplayName(user)}
+                      </p>
+                    </Link>
                     <p className="truncate font-mono text-[11px] text-slate-400">
                       {user.email}
                     </p>
@@ -444,7 +448,14 @@ function UsersTable({
               </TableCell>
 
               <TableCell className="text-right text-sm text-slate-600">
-                {formatDate(user.created_at)}
+                <div className="flex items-center justify-end gap-3">
+                  {formatDate(user.created_at)}
+                  <Link href={`/users/${user.id}`}>
+                    <Button variant="ghost" size="sm" className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+                      Profile
+                    </Button>
+                  </Link>
+                </div>
               </TableCell>
             </TableRow>
           );

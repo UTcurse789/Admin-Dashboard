@@ -18,8 +18,6 @@ if (typeof window !== "undefined") {
       capture_pageview: false, // We'll trigger this manually in a layout effect
     });
     posthogInitialized = true;
-  } else {
-    console.warn("PostHog environment variables missing. Analytics disabled in this environment.");
   }
 }
 
@@ -41,6 +39,10 @@ function PostHogPageView() {
 }
 
 export function CSPostHogProvider({ children }: { children: React.ReactNode }) {
+  if (!posthogInitialized) {
+    return <>{children}</>;
+  }
+
   return (
     <PostHogProvider client={posthog}>
       <Suspense fallback={null}>

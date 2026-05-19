@@ -17,6 +17,7 @@ import {
   Mail,
   Megaphone,
   BarChart2,
+  Route,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ const navItems = [
   { label: "Ads", href: "/ads", icon: Megaphone },
   { label: "User Activity", href: "/user-activity", icon: Activity },
   { label: "Funnels", href: "/funnels", icon: Filter },
+  { label: "Journey Intelligence", href: "/journey-intelligence", icon: Route },
   { label: "System", href: "/system", icon: Settings },
 ];
 
@@ -65,8 +67,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           width={128}
           height={32}
           preload
-          style={{ width: "auto", height: "auto" }}
-          className="h-8 w-auto"
+          className="block"
         />
       </div>
 
@@ -172,16 +173,16 @@ export default function DashboardLayout({
               />
             </div>
 
-            {/* GA4 Dashboard shortcut */}
+            {/* Page analytics shortcut */}
             <a
               href="/ga4-dashboard.html"
               target="_blank"
               rel="noopener noreferrer"
-              title="GA4 Page Intelligence"
+              title="Page Intelligence"
               className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 hover:border-emerald-300"
             >
               <BarChart2 className="h-3.5 w-3.5" />
-              GA4
+              Analytics
             </a>
 
             <Button variant="ghost" size="icon" className="relative">

@@ -232,12 +232,32 @@ export interface BrevoInsight {
 }
 
 export interface BrevoBreakdownContactRecord {
-  id: number;
+  id: string | number;
   email: string | null;
   firstName: string | null;
   organisation: string | null;
-  createdAt: string;
   value: string;
+  createdAt: string;
+}
+
+export interface BrevoSubjectDetailedStats {
+  subject: string;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+  totalEvents: number;
+  openedContacts: BrevoBreakdownContactRecord[];
+  clickedContacts: BrevoBreakdownContactRecord[];
+  bouncedContacts: BrevoBreakdownContactRecord[];
+}
+
+export interface BrevoTransactionalDailyTrend {
+  date: string;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
 }
 
 export interface BrevoBreakdownWithContacts extends BrevoBreakdownItem {
@@ -318,7 +338,8 @@ export interface BrevoAnalyticsData {
     clickToOpenRate: number;
     issueRate: number;
     eventBreakdown: BrevoBreakdownItem[];
-    topSubjects: BrevoBreakdownItem[];
+    transactionalTrend: BrevoTransactionalDailyTrend[];
+    topSubjects: BrevoSubjectDetailedStats[];
     recentIssues: BrevoRecentEvent[];
     recentActivity: BrevoRecentEvent[];
   };
@@ -399,6 +420,38 @@ function buildLastThirtyDaySeries(contacts: BrevoContactRecord[]): BrevoDailyMet
       date: key,
       count: counts.get(key) ?? 0,
     });
+  }
+
+  return dates;
+}
+
+function buildTransactionalTrend(events: any[]): BrevoTransactionalDailyTrend[] {
+  const counts = new Map<string, BrevoTransactionalDailyTrend>();
+
+  events.forEach((event) => {
+    if (!event.date) return;
+
+    const key = event.date.slice(0, 10);
+    if (!counts.has(key)) {
+      counts.set(key, { date: key, delivered: 0, opened: 0, clicked: 0, bounced: 0 });
+    }
+    
+    const stats = counts.get(key)!;
+    if (event.event === "delivered") stats.delivered += 1;
+    else if (event.event === "opened" || event.event === "unique_opened") stats.opened += 1;
+    else if (event.event === "click") stats.clicked += 1;
+    else if (["bounced", "hardBounces", "softBounces", "error", "blocked"].includes(event.event)) stats.bounced += 1;
+  });
+
+  const dates: BrevoTransactionalDailyTrend[] = [];
+
+  for (let dayOffset = 89; dayOffset >= 0; dayOffset -= 1) {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - dayOffset);
+    const key = date.toISOString().slice(0, 10);
+    dates.push(
+      counts.get(key) ?? { date: key, delivered: 0, opened: 0, clicked: 0, bounced: 0 }
+    );
   }
 
   return dates;
@@ -669,6 +722,7 @@ function buildUnavailableData(statusMessage: string): BrevoAnalyticsData {
       clickToOpenRate: 0,
       issueRate: 0,
       eventBreakdown: [],
+      transactionalTrend: [],
       topSubjects: [],
       recentIssues: [],
       recentActivity: [],
@@ -934,11 +988,55 @@ export async function getBrevoAnalytics(): Promise<BrevoAnalyticsData> {
       8
     );
 
-    const topSubjects = groupToBreakdown(
-      events.map((event) => event.subject ?? "No subject"),
-      Math.max(events.length, 1),
-      6
-    );
+    const subjectStatsMap = new Map<string, BrevoSubjectDetailedStats>();
+
+    events.forEach(event => {
+      const subject = event.subject ?? "No subject";
+      if (!subjectStatsMap.has(subject)) {
+        subjectStatsMap.set(subject, {
+          subject,
+          delivered: 0,
+          opened: 0,
+          clicked: 0,
+          bounced: 0,
+          totalEvents: 0,
+          openedContacts: [],
+          clickedContacts: [],
+          bouncedContacts: [],
+        });
+      }
+      const stats = subjectStatsMap.get(subject)!;
+      stats.totalEvents += 1;
+      
+      const matchedContact = contacts.find(c => c.email === event.email);
+      
+      const contactRecord = {
+        id: event.messageId || String(Math.random()),
+        email: event.email ?? "Unknown",
+        firstName: matchedContact ? getTextAttribute(matchedContact, "FIRSTNAME") : null,
+        organisation: matchedContact ? getTextAttribute(matchedContact, "ORGANISATION") : null,
+        value: event.event,
+        createdAt: event.date
+      };
+
+      if (event.event === "delivered") stats.delivered += 1;
+      else if (event.event === "opened" || event.event === "unique_opened") {
+        stats.opened += 1;
+        stats.openedContacts.push(contactRecord);
+      }
+      else if (event.event === "click") {
+        stats.clicked += 1;
+        stats.clickedContacts.push(contactRecord);
+      }
+      else if (["bounced", "hardBounces", "softBounces", "error", "blocked"].includes(event.event)) {
+        stats.bounced += 1;
+        stats.bouncedContacts.push(contactRecord);
+      }
+    });
+
+    const topSubjects = Array.from(subjectStatsMap.values())
+      .sort((a, b) => b.totalEvents - a.totalEvents)
+      .slice(0, 15);
 
     const recentIssues = events
       .filter((event) => ["blocked", "deferred", "error"].includes(event.event))
@@ -1077,6 +1175,29 @@ export async function getBrevoAnalytics(): Promise<BrevoAnalyticsData> {
         clickToOpenRate90d: percentage(uniqueClicks, Math.max(uniqueOpens, 1)),
         issueRate90d: percentage(issueCount, Math.max(requests, 1)),
       },
+      transactional: {
+        rangeLabel: "Last 90 days",
+        requests,
+        delivered,
+        blocked,
+        hardBounces,
+        softBounces,
+        deferred,
+        errors,
+        uniqueOpens,
+        uniqueClicks,
+        unsubscribed,
+        deliveryRate: percentage(delivered, Math.max(requests, 1)),
+        uniqueOpenRate: percentage(uniqueOpens, Math.max(delivered, 1)),
+        uniqueClickRate: percentage(uniqueClicks, Math.max(delivered, 1)),
+        clickToOpenRate: percentage(uniqueClicks, Math.max(uniqueOpens, 1)),
+        issueRate: percentage(issueCount, Math.max(requests, 1)),
+        eventBreakdown,
+        transactionalTrend: buildTransactionalTrend(events),
+        topSubjects,
+        recentIssues,
+        recentActivity,
+      },
       contacts: {
         trend30d: buildLastThirtyDaySeries(contacts),
         listBreakdown,
@@ -1111,33 +1232,68 @@ export async function getBrevoAnalytics(): Promise<BrevoAnalyticsData> {
         bestClickCampaign,
         highestBounceCampaign,
       },
-      transactional: {
-        rangeLabel: smtp.range ?? null,
-        requests,
-        delivered,
-        blocked,
-        hardBounces,
-        softBounces,
-        deferred,
-        errors,
-        uniqueOpens,
-        uniqueClicks,
-        unsubscribed,
-        deliveryRate: percentage(delivered, Math.max(requests, 1)),
-        uniqueOpenRate: percentage(uniqueOpens, Math.max(delivered, 1)),
-        uniqueClickRate: percentage(uniqueClicks, Math.max(delivered, 1)),
-        clickToOpenRate: percentage(uniqueClicks, Math.max(uniqueOpens, 1)),
-        issueRate: percentage(issueCount, Math.max(requests, 1)),
-        eventBreakdown,
-        topSubjects,
-        recentIssues,
-        recentActivity,
-      },
       insights: insights.slice(0, 6),
     };
   } catch (error) {
     return buildUnavailableData(
       error instanceof Error ? error.message : "Brevo analytics could not be loaded."
     );
+  }
+}
+
+export interface BrevoUserActivityData {
+  contact: BrevoContactRecord | null;
+  events: BrevoEventRecord[];
+  metrics: {
+    delivered: number;
+    opened: number;
+    clicked: number;
+    bounced: number;
+    openRate: number;
+    clickRate: number;
+  };
+}
+
+export async function getBrevoUserActivity(email: string): Promise<BrevoUserActivityData> {
+  if (!process.env.BREVO_API_KEY) {
+    return { contact: null, events: [], metrics: { delivered: 0, opened: 0, clicked: 0, bounced: 0, openRate: 0, clickRate: 0 } };
+  }
+
+  try {
+    const encodedEmail = encodeURIComponent(email);
+    
+    // Fetch contact details to see lists, attributes, etc.
+    const contactResult = await brevoFetch<BrevoContactRecord>(`/contacts/${encodedEmail}`).catch(() => null);
+    
+    // Fetch smtp events for this user (max 100 recent)
+    const eventsResult = await brevoFetch<BrevoEventsResponse>(`/smtp/statistics/events?email=${encodedEmail}&limit=100&sort=desc`).catch(() => ({ events: [] }));
+    
+    const events = eventsResult.events || [];
+    
+    // Calculate metrics
+    const delivered = events.filter(e => e.event === 'delivered').length;
+    // unique opens/clicks per messageId
+    const openedMessages = new Set(events.filter(e => e.event === 'opened').map(e => e.messageId));
+    const clickedMessages = new Set(events.filter(e => e.event === 'click').map(e => e.messageId));
+    
+    const opened = openedMessages.size;
+    const clicked = clickedMessages.size;
+    const bounced = events.filter(e => e.event === 'bounced' || e.event === 'hardBounces' || e.event === 'softBounces').length;
+    
+    return {
+      contact: contactResult,
+      events,
+      metrics: {
+        delivered,
+        opened,
+        clicked,
+        bounced,
+        openRate: percentage(opened, Math.max(delivered, 1)),
+        clickRate: percentage(clicked, Math.max(delivered, 1)),
+      }
+    };
+  } catch (error) {
+    console.error(`[Brevo] Failed to fetch activity for ${email}:`, error);
+    return { contact: null, events: [], metrics: { delivered: 0, opened: 0, clicked: 0, bounced: 0, openRate: 0, clickRate: 0 } };
   }
 }

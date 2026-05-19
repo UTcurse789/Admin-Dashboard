@@ -1,5 +1,5 @@
 import { attachDatabasePool } from "@vercel/functions";
-import pg, { type QueryResultRow } from "pg";
+import pg, { type PoolConfig, type QueryResultRow } from "pg";
 
 function parseBoundedInt(
   value: string | undefined,
@@ -42,12 +42,21 @@ const DB_IDLE_TIMEOUT_MS = parseBoundedInt(
   1000,
   60000
 );
-const DB_POOL_MAX = parseBoundedInt(process.env.DB_POOL_MAX, 3, 1, 20);
+const DB_POOL_MAX = parseBoundedInt(
+  process.env.DB_POOL_MAX,
+  isProduction ? 3 : 10,
+  1,
+  20
+);
 const DB_CONNECT_ATTEMPTS = parseBoundedInt(
   process.env.DB_CONNECT_ATTEMPTS,
   isProduction ? 3 : 1,
   1,
   5
+);
+const DB_BEST_EFFORT_CONNECT_ATTEMPTS = Math.min(
+  DB_CONNECT_ATTEMPTS,
+  parseBoundedInt(process.env.DB_BEST_EFFORT_CONNECT_ATTEMPTS, 1, 1, 5)
 );
 const DB_CONNECT_RETRY_DELAY_MS = parseBoundedInt(
   process.env.DB_CONNECT_RETRY_DELAY_MS,
@@ -110,26 +119,83 @@ const dbFailureState = {
   lastLoggedSignature: null as string | null,
 };
 
-export const pool = new pg.Pool({
-  connectionString: databaseUrl,
-  ...(shouldUseDatabaseSsl
-    ? { ssl: { rejectUnauthorized: !allowSelfSignedCerts } }
-    : {}),
-  max: DB_POOL_MAX,
-  connectionTimeoutMillis: DB_CONNECTION_TIMEOUT_MS,
-  idleTimeoutMillis: DB_IDLE_TIMEOUT_MS,
-  query_timeout: DB_QUERY_TIMEOUT_MS,
-  keepAlive: true,
-  allowExitOnIdle: true,
-});
+type DatabaseGlobalState = typeof globalThis & {
+  __energdivePgPool?: pg.Pool;
+  __energdivePgPoolKey?: string;
+};
 
-if (process.env.VERCEL) {
-  attachDatabasePool(pool);
+function buildPoolOptions(): PoolConfig {
+  return {
+    connectionString: databaseUrl,
+    ...(shouldUseDatabaseSsl
+      ? { ssl: { rejectUnauthorized: !allowSelfSignedCerts } }
+      : {}),
+    max: DB_POOL_MAX,
+    connectionTimeoutMillis: DB_CONNECTION_TIMEOUT_MS,
+    idleTimeoutMillis: DB_IDLE_TIMEOUT_MS,
+    query_timeout: DB_QUERY_TIMEOUT_MS,
+    keepAlive: true,
+    allowExitOnIdle: true,
+  };
 }
 
-pool.on("error", (error) => {
-  console.error("Unexpected PostgreSQL pool error:", error);
-});
+function buildPoolKey() {
+  return [
+    databaseUrl ?? "",
+    shouldUseDatabaseSsl ? "ssl" : "plain",
+    allowSelfSignedCerts ? "self-signed" : "strict",
+    DB_POOL_MAX,
+    DB_CONNECTION_TIMEOUT_MS,
+    DB_IDLE_TIMEOUT_MS,
+    DB_QUERY_TIMEOUT_MS,
+  ].join("|");
+}
+
+function createPool() {
+  const nextPool = new pg.Pool(buildPoolOptions());
+
+  if (process.env.VERCEL) {
+    attachDatabasePool(nextPool);
+  }
+
+  nextPool.on("error", (error) => {
+    console.error("Unexpected PostgreSQL pool error:", error);
+  });
+
+  return nextPool;
+}
+
+function getSharedPool() {
+  const globalState = globalThis as DatabaseGlobalState;
+  const poolKey = buildPoolKey();
+
+  if (
+    globalState.__energdivePgPool &&
+    globalState.__energdivePgPoolKey === poolKey
+  ) {
+    return globalState.__energdivePgPool;
+  }
+
+  const previousPool = globalState.__energdivePgPool;
+  const nextPool = createPool();
+
+  globalState.__energdivePgPool = nextPool;
+  globalState.__energdivePgPoolKey = poolKey;
+
+  if (previousPool && previousPool !== nextPool) {
+    void previousPool.end().catch((error) => {
+      console.error("Previous PostgreSQL pool shutdown failed:", error);
+    });
+  }
+
+  return nextPool;
+}
+
+function getPoolStats() {
+  return `pool(total=${pool.totalCount}, idle=${pool.idleCount}, waiting=${pool.waitingCount})`;
+}
+
+export const pool = getSharedPool();
 
 export class DbUnavailableError extends Error {
   constructor(message: string) {
@@ -145,6 +211,11 @@ export function isDbUnavailableError(
 }
 
 export type DbClient = pg.PoolClient;
+
+type DatabaseAccessOptions = {
+  connectAttempts?: number;
+  retryDelayMs?: number;
+};
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) {
@@ -182,7 +253,7 @@ function isTransientConnectionFailure(error: unknown) {
 }
 
 function cacheDbFailure(error: unknown) {
-  dbFailureState.reason = getErrorMessage(error);
+  dbFailureState.reason = `${getErrorMessage(error)} (${getPoolStats()})`;
   dbFailureState.unavailableUntil = Date.now() + DB_RETRY_COOLDOWN_MS;
 }
 
@@ -190,6 +261,14 @@ function clearDbFailureState() {
   dbFailureState.reason = null;
   dbFailureState.unavailableUntil = 0;
   dbFailureState.lastLoggedSignature = null;
+}
+
+export function isDatabaseOffline(): boolean {
+  return Date.now() < dbFailureState.unavailableUntil;
+}
+
+export function getDatabaseOfflineReason(): string | null {
+  return dbFailureState.reason;
 }
 
 function logDatabaseUnavailable(context: string, error: unknown) {
@@ -206,7 +285,10 @@ function logDatabaseUnavailable(context: string, error: unknown) {
   console.error(`[DB] ${context} unavailable:`, error);
 }
 
-async function ensureDatabaseAvailable(context: string) {
+async function ensureDatabaseAvailable(
+  context: string,
+  options: DatabaseAccessOptions = {}
+) {
   if (!databaseUrl) {
     throw new DbUnavailableError(
       "DATABASE_POOL_URL or DATABASE_URL is not configured."
@@ -220,11 +302,19 @@ async function ensureDatabaseAvailable(context: string) {
   }
 
   let client: pg.PoolClient | null = null;
+  const connectAttempts = Math.max(
+    1,
+    options.connectAttempts ?? DB_CONNECT_ATTEMPTS
+  );
+  const retryDelayMs = Math.max(
+    0,
+    options.retryDelayMs ?? DB_CONNECT_RETRY_DELAY_MS
+  );
 
   try {
     let lastError: unknown = null;
 
-    for (let attempt = 1; attempt <= DB_CONNECT_ATTEMPTS; attempt += 1) {
+    for (let attempt = 1; attempt <= connectAttempts; attempt += 1) {
       try {
         client = await pool.connect();
         clearDbFailureState();
@@ -232,15 +322,12 @@ async function ensureDatabaseAvailable(context: string) {
       } catch (error) {
         lastError = error;
 
-        if (
-          !isTransientConnectionFailure(error) ||
-          attempt === DB_CONNECT_ATTEMPTS
-        ) {
+        if (!isTransientConnectionFailure(error) || attempt === connectAttempts) {
           break;
         }
 
         await new Promise((resolve) =>
-          setTimeout(resolve, DB_CONNECT_RETRY_DELAY_MS * attempt)
+          setTimeout(resolve, retryDelayMs * attempt)
         );
       }
     }
@@ -255,9 +342,11 @@ async function ensureDatabaseAvailable(context: string) {
 
 export async function withDatabaseClient<T>(
   context: string,
-  operation: (client: DbClient) => Promise<T>
+  operation: (client: DbClient) => Promise<T>,
+  options: DatabaseAccessOptions = {}
 ) {
-  const client = await ensureDatabaseAvailable(context);
+  const client = await ensureDatabaseAvailable(context, options);
+  let destroyClient = false;
 
   try {
     const result = await operation(client);
@@ -265,13 +354,14 @@ export async function withDatabaseClient<T>(
     return result;
   } catch (error) {
     if (isTransientConnectionFailure(error)) {
+      destroyClient = true;
       cacheDbFailure(error);
       throw new DbUnavailableError(getErrorMessage(error));
     }
 
     throw error;
   } finally {
-    client.release();
+    client.release(destroyClient || undefined);
   }
 }
 
@@ -370,6 +460,77 @@ export async function getDbUsersDirectory(): Promise<DbUser[]> {
   }
 }
 
+export async function getDbUserById(id: string | number): Promise<DbUser | null> {
+  try {
+    return await withDatabaseClient("user by id", async (client) => {
+      const result = await client.query<DbUser>(
+        `SELECT id, clerk_id, email, first_name, last_name, phone, country, state,
+                job_title, organization, onboarding_completed, created_at,
+                source, data_source, salutation, registration_method,
+                utm_source, utm_medium, utm_campaign
+         FROM users
+         WHERE id = $1
+         LIMIT 1`,
+        [id]
+      );
+
+      return result.rows[0] || null;
+    });
+  } catch (error) {
+    if (isDbUnavailableError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export interface DbUserEnrichment {
+  preferred_frequency: string | null;
+  preferred_formats: string[];
+  industries: Array<{ industry: string | null; sub_industry: string | null }>;
+  communities: Array<{ community: string | null; sub_community: string | null }>;
+}
+
+export async function getDbUserEnrichment(id: string | number): Promise<DbUserEnrichment | null> {
+  try {
+    return await withDatabaseClient("user enrichment", async (client) => {
+      const q = `
+        SELECT 
+          u.preferred_frequency, 
+          u.preferred_formats,
+          (SELECT json_agg(json_build_object('industry', i.name, 'sub_industry', si.name)) 
+           FROM user_industries ui 
+           LEFT JOIN industry i ON ui.industry_id = i.id 
+           LEFT JOIN sub_industries si ON ui.sub_industry_id = si.id 
+           WHERE ui.user_id = u.id) as industries,
+          (SELECT json_agg(json_build_object('community', c.name, 'sub_community', sc.name)) 
+           FROM user_communities uc 
+           LEFT JOIN communities c ON uc.community_id = c.id 
+           LEFT JOIN sub_communities sc ON uc.sub_community_id = sc.id 
+           WHERE uc.user_id = u.id) as communities
+        FROM users u 
+        WHERE u.id = $1
+      `;
+      const result = await client.query(q, [id]);
+      if (result.rows.length === 0) return null;
+      
+      const row = result.rows[0];
+      return {
+        preferred_frequency: row.preferred_frequency,
+        preferred_formats: Array.isArray(row.preferred_formats) ? row.preferred_formats : [],
+        industries: Array.isArray(row.industries) ? row.industries : [],
+        communities: Array.isArray(row.communities) ? row.communities : [],
+      };
+    });
+  } catch (error) {
+    if (isDbUnavailableError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 function buildEmptyDbAnalytics(queryErrors: string[] = []): DbAnalytics {
   return {
     totalDbUsers: 0,
@@ -415,87 +576,89 @@ async function runAnalyticsQuery<TResult extends QueryResultRow>(
  */
 export async function getDbAnalytics(): Promise<DbAnalytics> {
   try {
-    return await withDatabaseClient("analytics", async (client) => {
-      const queryErrors: string[] = [];
-      const totalUsersRows = await runAnalyticsQuery<{ cnt: string }>(
-        client,
-        "total_users",
-        "SELECT COUNT(*) as cnt FROM users",
-        [],
-        [{ cnt: "0" }],
-        queryErrors
-      );
-      const sourceRows = await runAnalyticsQuery<{ source: string | null; cnt: string }>(
-        client,
-        "by_source",
-        "SELECT source, COUNT(*) as cnt FROM users GROUP BY source ORDER BY cnt DESC",
-        [],
-        [],
-        queryErrors
-      );
-      const dataSourceRows = await runAnalyticsQuery<{
-        data_source: string | null;
-        cnt: string;
-      }>(
-        client,
-        "by_data_source",
-        "SELECT data_source, COUNT(*) as cnt FROM users GROUP BY data_source ORDER BY cnt DESC",
-        [],
-        [],
-        queryErrors
-      );
-      const salutationRows = await runAnalyticsQuery<{
-        salutation: string | null;
-        cnt: string;
-      }>(
-        client,
-        "by_salutation",
-        "SELECT salutation, COUNT(*) as cnt FROM users WHERE salutation IS NOT NULL GROUP BY salutation ORDER BY cnt DESC",
-        [],
-        [],
-        queryErrors
-      );
-      const industryRows = await runAnalyticsQuery<{ industry: string; cnt: string }>(
-        client,
-        "by_industry",
-        `SELECT i.name as industry, COUNT(*) as cnt
+    return await withDatabaseClient(
+      "analytics",
+      async (client) => {
+        const queryErrors: string[] = [];
+        const totalUsersRows = await runAnalyticsQuery<{ cnt: string }>(
+          client,
+          "total_users",
+          "SELECT COUNT(*) as cnt FROM users",
+          [],
+          [{ cnt: "0" }],
+          queryErrors
+        );
+        const sourceRows = await runAnalyticsQuery<{ source: string | null; cnt: string }>(
+          client,
+          "by_source",
+          "SELECT source, COUNT(*) as cnt FROM users GROUP BY source ORDER BY cnt DESC",
+          [],
+          [],
+          queryErrors
+        );
+        const dataSourceRows = await runAnalyticsQuery<{
+          data_source: string | null;
+          cnt: string;
+        }>(
+          client,
+          "by_data_source",
+          "SELECT data_source, COUNT(*) as cnt FROM users GROUP BY data_source ORDER BY cnt DESC",
+          [],
+          [],
+          queryErrors
+        );
+        const salutationRows = await runAnalyticsQuery<{
+          salutation: string | null;
+          cnt: string;
+        }>(
+          client,
+          "by_salutation",
+          "SELECT salutation, COUNT(*) as cnt FROM users WHERE salutation IS NOT NULL GROUP BY salutation ORDER BY cnt DESC",
+          [],
+          [],
+          queryErrors
+        );
+        const industryRows = await runAnalyticsQuery<{ industry: string; cnt: string }>(
+          client,
+          "by_industry",
+          `SELECT i.name as industry, COUNT(*) as cnt
        FROM user_industries ui
        JOIN industry i ON ui.industry_id = i.id
        GROUP BY i.name
        ORDER BY cnt DESC`,
-        [],
-        [],
-        queryErrors
-      );
-      const stateRows = await runAnalyticsQuery<{ state: string; cnt: string }>(
-        client,
-        "by_state",
-        `SELECT state, COUNT(*) as cnt FROM users 
+          [],
+          [],
+          queryErrors
+        );
+        const stateRows = await runAnalyticsQuery<{ state: string; cnt: string }>(
+          client,
+          "by_state",
+          `SELECT state, COUNT(*) as cnt FROM users 
        WHERE state IS NOT NULL AND state != '' 
        GROUP BY state ORDER BY cnt DESC LIMIT 15`,
-        [],
-        [],
-        queryErrors
-      );
-      const dailyRegistrationRows = await runAnalyticsQuery<{
-        date: Date;
-        cnt: string;
-      }>(
-        client,
-        "daily_registrations",
-        `SELECT DATE(created_at) as date, COUNT(*) as cnt 
+          [],
+          [],
+          queryErrors
+        );
+        const dailyRegistrationRows = await runAnalyticsQuery<{
+          date: Date;
+          cnt: string;
+        }>(
+          client,
+          "daily_registrations",
+          `SELECT DATE(created_at) as date, COUNT(*) as cnt 
        FROM users 
        GROUP BY DATE(created_at) 
        ORDER BY DATE(created_at) DESC
        LIMIT $1`,
-        [MAX_DAILY_REG_ROWS],
-        [],
-        queryErrors
-      );
-      const growthRows = await runAnalyticsQuery<{ period: string; cnt: string }>(
-        client,
-        "growth",
-        `SELECT 
+          [MAX_DAILY_REG_ROWS],
+          [],
+          queryErrors
+        );
+        const growthRows = await runAnalyticsQuery<{ period: string; cnt: string }>(
+          client,
+          "growth",
+          `SELECT 
          'this_month' as period, COUNT(*) as cnt FROM users 
          WHERE created_at >= DATE_TRUNC('month', NOW())
        UNION ALL
@@ -503,85 +666,91 @@ export async function getDbAnalytics(): Promise<DbAnalytics> {
          'last_month' as period, COUNT(*) as cnt FROM users 
          WHERE created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
            AND created_at < DATE_TRUNC('month', NOW())`,
-        [],
-        [],
-        queryErrors
-      );
-      const recentUserRows = await runAnalyticsQuery<DbUser>(
-        client,
-        "recent_users",
-        `SELECT id, clerk_id, email, first_name, last_name, phone, country, state,
+          [],
+          [],
+          queryErrors
+        );
+        const recentUserRows = await runAnalyticsQuery<DbUser>(
+          client,
+          "recent_users",
+          `SELECT id, clerk_id, email, first_name, last_name, phone, country, state,
               job_title, organization, onboarding_completed, created_at,
               source, data_source, salutation, registration_method,
               utm_source, utm_medium, utm_campaign
        FROM users ORDER BY created_at DESC LIMIT 20`,
-        [],
-        [],
-        queryErrors
-      );
+          [],
+          [],
+          queryErrors
+        );
 
-      const totalDbUsers = parseInt(totalUsersRows[0]?.cnt || "0", 10);
+        const totalDbUsers = parseInt(totalUsersRows[0]?.cnt || "0", 10);
 
-      const bySource: CountRow[] = sourceRows.map((r) => ({
-        label: r.source || "Unknown",
-        count: parseInt(r.cnt, 10),
-      }));
-
-      const byDataSource: CountRow[] = dataSourceRows.map((r) => ({
-        label: r.data_source || "Unknown",
-        count: parseInt(r.cnt, 10),
-      }));
-
-      const bySalutation: CountRow[] = salutationRows.map((r) => ({
-        label: r.salutation || "Unknown",
-        count: parseInt(r.cnt, 10),
-      }));
-
-      const byIndustry: CountRow[] = industryRows.map((r) => ({
-        label: r.industry,
-        count: parseInt(r.cnt, 10),
-      }));
-
-      const byState: CountRow[] = stateRows.map((r) => ({
-        label: r.state,
-        count: parseInt(r.cnt, 10),
-      }));
-
-      const dailyRegistrations: DailyCount[] = dailyRegistrationRows
-        .map((r) => ({
-          date: new Date(r.date).toISOString().slice(0, 10),
+        const bySource: CountRow[] = sourceRows.map((r) => ({
+          label: r.source || "Unknown",
           count: parseInt(r.cnt, 10),
-        }))
-        .reverse();
+        }));
 
-      let thisMonthCount = 0;
-      let lastMonthCount = 0;
-      growthRows.forEach((r) => {
-        if (r.period === "this_month") thisMonthCount = parseInt(r.cnt, 10);
-        if (r.period === "last_month") lastMonthCount = parseInt(r.cnt, 10);
-      });
-      const growthRate =
-        lastMonthCount > 0
-          ? ((thisMonthCount - lastMonthCount) / lastMonthCount) * 100
-          : thisMonthCount > 0
-          ? 100
-          : 0;
+        const byDataSource: CountRow[] = dataSourceRows.map((r) => ({
+          label: r.data_source || "Unknown",
+          count: parseInt(r.cnt, 10),
+        }));
 
-      return {
-        totalDbUsers,
-        bySource,
-        byDataSource,
-        bySalutation,
-        byIndustry,
-        byState,
-        dailyRegistrations,
-        growthRate,
-        thisMonthCount,
-        lastMonthCount,
-        recentDbUsers: recentUserRows,
-        queryErrors,
-      };
-    });
+        const bySalutation: CountRow[] = salutationRows.map((r) => ({
+          label: r.salutation || "Unknown",
+          count: parseInt(r.cnt, 10),
+        }));
+
+        const byIndustry: CountRow[] = industryRows.map((r) => ({
+          label: r.industry,
+          count: parseInt(r.cnt, 10),
+        }));
+
+        const byState: CountRow[] = stateRows.map((r) => ({
+          label: r.state,
+          count: parseInt(r.cnt, 10),
+        }));
+
+        const dailyRegistrations: DailyCount[] = dailyRegistrationRows
+          .map((r) => ({
+            date: new Date(r.date).toISOString().slice(0, 10),
+            count: parseInt(r.cnt, 10),
+          }))
+          .reverse();
+
+        let thisMonthCount = 0;
+        let lastMonthCount = 0;
+        growthRows.forEach((r) => {
+          if (r.period === "this_month") thisMonthCount = parseInt(r.cnt, 10);
+          if (r.period === "last_month") lastMonthCount = parseInt(r.cnt, 10);
+        });
+        const growthRate =
+          lastMonthCount > 0
+            ? ((thisMonthCount - lastMonthCount) / lastMonthCount) * 100
+            : thisMonthCount > 0
+            ? 100
+            : 0;
+
+        return {
+          totalDbUsers,
+          bySource,
+          byDataSource,
+          bySalutation,
+          byIndustry,
+          byState,
+          dailyRegistrations,
+          growthRate,
+          thisMonthCount,
+          lastMonthCount,
+          recentDbUsers: recentUserRows,
+          queryErrors,
+        };
+      },
+      {
+        // These routes already degrade gracefully, so fail fast instead of
+        // burning extra request time retrying an unavailable database.
+        connectAttempts: DB_BEST_EFFORT_CONNECT_ATTEMPTS,
+      }
+    );
   } catch (error) {
     if (isDbUnavailableError(error)) {
       return buildEmptyDbAnalytics([`database: ${error.message}`]);
@@ -631,7 +800,9 @@ function buildEmptyFunnelAnalytics(): FunnelAnalytics {
 
 export async function getFunnelAnalytics(): Promise<FunnelAnalytics> {
   try {
-    return await withDatabaseClient("funnel analytics", async (client) => {
+    return await withDatabaseClient(
+      "funnel analytics",
+      async (client) => {
       // Run queries sequentially on the same client — pg does not multiplex
       // a single PoolClient, so Promise.all triggers a deprecation in pg v8+.
       const sourceConvRes = await client.query<{
@@ -717,8 +888,12 @@ export async function getFunnelAnalytics(): Promise<FunnelAnalytics> {
             onboarded: parseInt(r.onboarded, 10),
           }))
           .reverse() as MonthlyCoHortRow[],
-      };
-    });
+        };
+      },
+      {
+        connectAttempts: DB_BEST_EFFORT_CONNECT_ATTEMPTS,
+      }
+    );
   } catch (error) {
     if (isDbUnavailableError(error)) {
       return buildEmptyFunnelAnalytics();

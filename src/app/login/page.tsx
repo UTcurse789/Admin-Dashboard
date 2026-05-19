@@ -55,8 +55,7 @@ export default function LoginPage() {
             width={160}
             height={40}
             preload
-            style={{ width: "auto", height: "auto" }}
-            className="h-10 w-auto"
+            className="block"
           />
         </div>
 

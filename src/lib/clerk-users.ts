@@ -49,17 +49,27 @@ export interface ClerkUsersSnapshot {
   totalCount: number;
 }
 
+interface ClerkUsersSnapshotOptions {
+  minimumCreatedAtMs?: number | null;
+  maximumCreatedAtMs?: number | null;
+  bypassDefaultLookback?: boolean;
+}
+
 function toDateKey(ts: number) {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
-export async function getClerkUsersSnapshot(): Promise<ClerkUsersSnapshot> {
+export async function getClerkUsersSnapshot(
+  options: ClerkUsersSnapshotOptions = {}
+): Promise<ClerkUsersSnapshot> {
   const client = await clerkClient();
   const users: ClerkUserRecord[] = [];
   let offset = 0;
   const limit = CLERK_PAGE_SIZE;
   let totalCount = 0;
   let pagesFetched = 0;
+  const minimumCreatedAtMs = options.minimumCreatedAtMs ?? null;
+  const maximumCreatedAtMs = options.maximumCreatedAtMs ?? null;
   const lookbackCutoff =
     Date.now() - CLERK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
 
@@ -95,12 +105,22 @@ export async function getClerkUsersSnapshot(): Promise<ClerkUsersSnapshot> {
 
     const oldestFetchedCreatedAt =
       response.data[response.data.length - 1]?.createdAt ?? null;
+    const crossedRequestedRange =
+      minimumCreatedAtMs != null &&
+      oldestFetchedCreatedAt !== null &&
+      oldestFetchedCreatedAt < minimumCreatedAtMs;
+    const crossedDefaultLookback =
+      !options.bypassDefaultLookback &&
+      oldestFetchedCreatedAt !== null &&
+      oldestFetchedCreatedAt < lookbackCutoff;
+    const reachedPageLimit =
+      !options.bypassDefaultLookback && pagesFetched >= CLERK_MAX_PAGES;
 
     if (
       response.data.length < limit ||
-      pagesFetched >= CLERK_MAX_PAGES ||
-      (oldestFetchedCreatedAt !== null &&
-        oldestFetchedCreatedAt < lookbackCutoff)
+      reachedPageLimit ||
+      crossedDefaultLookback ||
+      crossedRequestedRange
     ) {
       break;
     }
@@ -108,9 +128,24 @@ export async function getClerkUsersSnapshot(): Promise<ClerkUsersSnapshot> {
     offset += limit;
   }
 
+  const filteredUsers = users.filter((user) => {
+    if (minimumCreatedAtMs != null && user.createdAt < minimumCreatedAtMs) {
+      return false;
+    }
+
+    if (maximumCreatedAtMs != null && user.createdAt > maximumCreatedAtMs) {
+      return false;
+    }
+
+    return true;
+  });
+
   return {
-    users,
-    totalCount: Math.max(totalCount, users.length),
+    users: filteredUsers,
+    totalCount:
+      minimumCreatedAtMs != null || maximumCreatedAtMs != null
+        ? filteredUsers.length
+        : Math.max(totalCount, users.length),
   };
 }
 
@@ -152,3 +187,44 @@ export function mapClerkUsersToDbUsers(users: ClerkUserRecord[]): DbUser[] {
     utm_campaign: null,
   }));
 }
+
+export async function getClerkUserById(userId: string): Promise<DbUser | null> {
+  try {
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    if (!user) return null;
+    
+    const primaryEmail =
+      user.emailAddresses.find(
+        (emailAddress) => emailAddress.id === user.primaryEmailAddressId
+      )?.emailAddress ??
+      user.emailAddresses[0]?.emailAddress ??
+      "No email";
+
+    return {
+      id: user.id,
+      clerk_id: user.id,
+      email: primaryEmail,
+      first_name: user.firstName || null,
+      last_name: user.lastName || null,
+      phone: null,
+      country: null,
+      state: null,
+      job_title: null,
+      organization: null,
+      onboarding_completed: Boolean(user.lastSignInAt),
+      created_at: new Date(user.createdAt),
+      source: null,
+      data_source: "Clerk fallback",
+      salutation: null,
+      registration_method: null,
+      utm_source: null,
+      utm_medium: null,
+      utm_campaign: null,
+    };
+  } catch (error) {
+    console.error(`Error fetching user ${userId} from Clerk:`, error);
+    return null;
+  }
+}
+

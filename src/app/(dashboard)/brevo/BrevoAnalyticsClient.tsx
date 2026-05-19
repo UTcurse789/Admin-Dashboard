@@ -41,6 +41,7 @@ import type {
   BrevoBreakdownContactRecord,
   BrevoCampaignPerformance,
   BrevoDailyMetric,
+  BrevoTransactionalDailyTrend,
 } from "@/lib/brevo";
 
 const CHART_COLORS = [
@@ -176,6 +177,69 @@ function buildLineOption(points: BrevoDailyMetric[]): EChartsOption {
           },
         },
         data: points.map((point) => point.count),
+      },
+    ],
+  };
+}
+
+function buildTransactionalTrendOption(points: BrevoTransactionalDailyTrend[]): EChartsOption {
+  return {
+    tooltip: { trigger: "axis" },
+    color: ["#2563eb", "#10b981", "#8b5cf6", "#f43f5e"],
+    legend: {
+      top: 0,
+      icon: "circle",
+      itemWidth: 8,
+      textStyle: { fontSize: 11, color: "#64748b" },
+    },
+    grid: { left: "3%", right: "4%", top: "38px", bottom: "3%", containLabel: true },
+    xAxis: {
+      type: "category",
+      data: points.map((point) =>
+        new Date(point.date).toLocaleDateString("en-IN", { month: "short", day: "numeric" })
+      ),
+      axisLabel: { color: "#94a3b8", fontSize: 10 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: { color: "#94a3b8", fontSize: 10 },
+      splitLine: { lineStyle: { color: "#f1f5f9" } },
+      axisLine: { show: false },
+    },
+    series: [
+      {
+        name: "Delivered",
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 3, color: "#2563eb" },
+        data: points.map((point) => point.delivered),
+      },
+      {
+        name: "Opened",
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 3, color: "#10b981" },
+        data: points.map((point) => point.opened),
+      },
+      {
+        name: "Clicked",
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 3, color: "#8b5cf6" },
+        data: points.map((point) => point.clicked),
+      },
+      {
+        name: "Bounced",
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 3, color: "#f43f5e" },
+        data: points.map((point) => point.bounced),
       },
     ],
   };
@@ -456,6 +520,10 @@ export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
   const utmSourceOption = useMemo(
     () => buildHorizontalBarOption(topUtmSource, "#65a30d"),
     [topUtmSource]
+  );
+  const transactionalTrendOption = useMemo(
+    () => buildTransactionalTrendOption(data.transactional.transactionalTrend),
+    [data.transactional.transactionalTrend]
   );
 
   if (!data.available) {
@@ -1448,6 +1516,33 @@ export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
           })}
         </div>
 
+        <Card className="border border-slate-200 bg-white shadow-sm">
+          <CardHeader className="space-y-3 pb-2">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-emerald-600" />
+              <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
+                Transactional event trend (last 90 days)
+              </CardTitle>
+            </div>
+            <p className="text-sm text-slate-500">
+              Daily aggregates of transactional emails delivered, opened, clicked, and bounced.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[340px] w-full">
+              {data.transactional.transactionalTrend.length > 0 ? (
+                <ReactECharts
+                  option={transactionalTrendOption}
+                  style={{ height: "100%", width: "100%" }}
+                  notMerge
+                />
+              ) : (
+                emptyChart("No transactional trend is available.")
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           <Card className="border border-slate-200 bg-white shadow-sm">
             <CardHeader className="space-y-3 pb-2">
@@ -1490,23 +1585,61 @@ export function BrevoAnalyticsClient({ data }: { data: BrevoAnalyticsData }) {
                       <TableHead className="pl-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                         Subject
                       </TableHead>
+                      <TableHead className="text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Delivered
+                      </TableHead>
+                      <TableHead className="text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Opened
+                      </TableHead>
+                      <TableHead className="text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Clicked
+                      </TableHead>
                       <TableHead className="pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                        Events
+                        Bounced
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {data.transactional.topSubjects.length > 0 ? (
-                      data.transactional.topSubjects.map((subject) => (
+                      data.transactional.topSubjects.map((stat: any) => (
                         <TableRow
-                          key={subject.label}
+                          key={stat.subject}
                           className="border-b border-slate-50 transition-colors hover:bg-slate-50/60"
                         >
-                          <TableCell className="pl-6 text-sm text-slate-700">
-                            {subject.label}
+                          <TableCell className="pl-6">
+                            <p className="text-sm font-medium text-slate-950 truncate max-w-[280px]" title={stat.subject}>
+                              {stat.subject}
+                            </p>
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-slate-700">
+                            {formatCount(stat.delivered)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-slate-700">
+                            <button
+                              onClick={() => openDrilldown(`Opened: ${stat.subject}`, stat.openedContacts)}
+                              className="text-blue-600 hover:underline font-medium hover:text-blue-700"
+                              disabled={stat.openedContacts.length === 0}
+                            >
+                              {formatCount(stat.opened)}
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-slate-700">
+                            <button
+                              onClick={() => openDrilldown(`Clicked: ${stat.subject}`, stat.clickedContacts)}
+                              className="text-purple-600 hover:underline font-medium hover:text-purple-700"
+                              disabled={stat.clickedContacts.length === 0}
+                            >
+                              {formatCount(stat.clicked)}
+                            </button>
                           </TableCell>
                           <TableCell className="pr-6 text-right text-sm text-slate-700">
-                            {formatCount(subject.count)}
+                            <button
+                              onClick={() => openDrilldown(`Bounced: ${stat.subject}`, stat.bouncedContacts)}
+                              className="text-rose-600 hover:underline font-medium hover:text-rose-700"
+                              disabled={stat.bouncedContacts.length === 0}
+                            >
+                              {formatCount(stat.bounced)}
+                            </button>
                           </TableCell>
                         </TableRow>
                       ))

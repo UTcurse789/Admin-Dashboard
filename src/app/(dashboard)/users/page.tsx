@@ -24,18 +24,18 @@ function percentOf(value: number, total: number) {
 }
 
 export default async function UsersPage() {
-  const [dbUsers, analytics, clerkSnapshot] = await Promise.all([
-    getDbUsersDirectory(),
+  const [analytics, clerkSnapshot] = await Promise.all([
     getDbAnalytics(),
     getClerkUsersSnapshot().catch((error) => {
       console.error("Users page Clerk fallback failed:", error);
       return null;
     }),
   ]);
-
   const databaseStatusMessage = getDatabaseUnavailableMessage(
     analytics.queryErrors
   );
+  const dbUsers = databaseStatusMessage ? [] : await getDbUsersDirectory();
+
   const usingClerkFallback =
     Boolean(databaseStatusMessage) &&
     Boolean(clerkSnapshot && clerkSnapshot.users.length > 0);
